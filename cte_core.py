@@ -201,6 +201,14 @@ def load_base_data(version: int = 3):
     type_slow_bump = {'Thermoforming': 20.0}
     part_slow_bump = {'Part-017': 6.0, 'Part-022': 6.0}
 
+    # Multi-part tools (v3): real client data has tools that mould more than one
+    # part. Draws come from a DEDICATED generator so the global np.random
+    # sequence — and therefore every hour / shot / efficiency value below — is
+    # unchanged; only some Part *labels* differ. Scenario dynamics
+    # (part_slopes / part_dyn / part_slow_bump) stay keyed to the tool's
+    # PRIMARY part, which is what those scenarios were tuned against.
+    part_rng = np.random.default_rng(2026)
+
     records = []
     tool_counter = 1
     for sup, (start_lvl, slope) in suppliers.items():
@@ -212,6 +220,13 @@ def load_base_data(version: int = 3):
             ttype = np.random.choice(type_pools[t])
             product = np.random.choice(product_pools[t])
             part = np.random.choice(part_pools[t])
+            _r = part_rng.random()
+            _n_extra = 2 if _r < 0.08 else (1 if _r < 0.28 else 0)
+            tool_parts = [str(part)]
+            if _n_extra:
+                _pool = [p for p in part_pools[t] if p != part]
+                tool_parts += [str(p) for p in part_rng.choice(_pool, size=min(_n_extra, len(_pool)),
+                                                               replace=False)]
             plant = np.random.choice(plant_pools[t])
             oem = np.random.choice(oem_pool)
             toolmaker = np.random.choice(['TM-A', 'TM-B', 'TM-C', 'TM-D'])
@@ -271,7 +286,9 @@ def load_base_data(version: int = 3):
                         'Shots_Gained': sg, 'Shots_Lost': sl, 'Used_Hours': used,
                         'Expected_Hours': expected, 'Base_Fin_Gain': bfg, 'Base_Fin_Loss': bfl,
                         'Supplier': sup, 'Tooling Type': ttype, 'Product': product,
-                        'Part': part, 'Tooling': tool_id, 'Date': date,
+                        'Part': (tool_parts[0] if len(tool_parts) == 1
+                                 else str(part_rng.choice(tool_parts))),
+                        'Tooling': tool_id, 'Date': date,
                         'OEM Business Division': oem, 'Toolmaker': toolmaker,
                         'Plant': plant, 'Cavities': cavities, '_vol': volume,
                     })

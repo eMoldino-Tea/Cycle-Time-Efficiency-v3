@@ -94,6 +94,12 @@ def generate(num_tools=80, weeks=52, end_date=None, seed=None):
         ttype = rng.choice(TOOLING_TYPES)
         product = rng.choice(PRODUCTS)
         part = rng.choice(PARTS)
+        _r = rng.random()
+        _n_extra = 2 if _r < 0.08 else (1 if _r < 0.28 else 0)
+        tool_parts = [str(part)]
+        if _n_extra:
+            _pool = [p for p in PARTS if p != part]
+            tool_parts += [str(p) for p in rng.choice(_pool, size=_n_extra, replace=False)]
         plant = rng.choice(PLANTS)
         oem = rng.choice(OEM_DIVISIONS)
         toolmaker = rng.choice(TOOLMAKERS)
@@ -130,7 +136,9 @@ def generate(num_tools=80, weeks=52, end_date=None, seed=None):
                     'Base_Fin_Gain': gain * BASELINE_RATE,
                     'Base_Fin_Loss': loss * BASELINE_RATE,
                     'Supplier': sup, 'Tooling Type': ttype, 'Product': product,
-                    'Part': part, 'Tooling': tool_id, 'Date': date,
+                    'Part': (tool_parts[0] if len(tool_parts) == 1
+                             else str(rng.choice(tool_parts))),
+                    'Tooling': tool_id, 'Date': date,
                     'OEM Business Division': oem, 'Toolmaker': toolmaker,
                     'Plant': plant, 'Cavities': cavities,
                     'Total_Shots': shots, 'ACT': act, 'Actual_CT': actual_ct,

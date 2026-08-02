@@ -83,3 +83,16 @@ def test_demo_data_has_country_column(demo):
 def test_a_supplier_can_span_multiple_countries(demo):
     spans = demo.groupby("Supplier")["Country"].nunique()
     assert (spans > 1).any(), "Supplier→Country must not be modelled as a strict tree"
+
+
+def test_some_tools_make_more_than_one_part(demo):
+    parts_per_tool = demo.groupby("Tooling")["Part"].nunique()
+    multi = int((parts_per_tool > 1).sum())
+    assert multi >= 10, f"expected ~20-30% of {len(parts_per_tool)} tools multi-part, got {multi}"
+    assert parts_per_tool.max() >= 3, "expected at least one three-part tool"
+
+
+def test_multi_part_tools_did_not_disturb_the_math(demo):
+    # Identical assertions to the baseline lock: Part labels moved, numbers did not.
+    assert demo["Used_Hours"].sum() == pytest.approx(BASELINE_USED_HOURS, abs=1e-6)
+    assert core.calc_weighted_eff(demo) == pytest.approx(BASELINE_WEIGHTED_EFF, abs=1e-9)
