@@ -122,3 +122,101 @@ def _ranking_dims(level):
     if level == 'region':
         return ['Country', 'Supplier', 'Tooling', 'Part']
     return ['Supplier', 'Tooling', 'Part']
+
+
+def _tool_table(df, period_label, tolerance_pct):
+    """Tool rows in v3's canonical tool-table shape (Part C decision 9)."""
+    t = core.entity_detail_table(df, 'Tooling',
+                                 extra_cols=('Region', 'Country', 'Plant'),
+                                 period_label=period_label, tolerance_pct=tolerance_pct)
+    if t.empty:
+        return t
+    t = t.rename(columns={'Tooling': 'Tooling ID'})
+    return t[[c for c in core.V3_TOOL_COLS if c in t.columns]]
+
+
+def render_supplier(ctx):
+    """Part C section 4 — individual supplier overview."""
+    ui.entity_badge("Supplier:", ctx.value)
+
+    ui.section("Summary")
+    ui.summary_tiles(core.scope_summary(ctx.scope, ctx.tolerance_pct), "Tools")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    pie_col, rank_col = st.columns([1, 2])
+    with pie_col:
+        ch.single_pie(ctx.scope, ctx.tolerance_pct, ctx.keyns,
+                      title=f"{ctx.value} — Fast / Within / Slow")
+    with rank_col:
+        ui.section("Saving Opportunity & Loss by Tool", size="1.1rem")
+        ch.ranking_bars(ctx.scope, ['Tooling'], ctx.tolerance_pct, ctx.keyns)
+
+    st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
+    ch.render_trend_block(ctx.trend, nav.LEVELS['supplier']['trend_dim'], ctx.keyns)
+
+    st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
+    ui.section("Tool Detail")
+    st.caption("Select a row to open that tool's report.")
+    tools = _tool_table(ctx.scope, ctx.period_label, ctx.tolerance_pct)
+    if tools.empty:
+        st.info("No tool data for this supplier.")
+        return
+    top = st.columns([3, 1])
+    with top[0]:
+        view = ui.search_box(tools, f"tool_{ctx.keyns}")
+    with top[1]:
+        st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
+        ui.download_csv(ui.v3_display(view), "Export CSV",
+                        f"{ctx.value}_tools.csv", f"tool_{ctx.keyns}")
+    _table_drill(view, 'Tooling ID', 'tool', f"tool_{ctx.keyns}")
+
+
+def render_tool(ctx):
+    """Part C sections 6 / 7.1.a — the individual tool report page.
+
+    Reachable from a supplier, a tooling type, or a part's tool list; the
+    breadcrumb shows whichever path was taken.
+    """
+    if ctx.scope.empty:
+        st.info("No data available for this tool.")
+        return
+    row = core.compute_comprehensive_row(ctx.value, ctx.scope, 'Tooling ID',
+                                         ctx.period_label, tolerance_pct=ctx.tolerance_pct)
+    ui.entity_badge("Tool:", ctx.value)
+
+    parts = sorted(ctx.scope['Part'].dropna().unique().tolist())
+    part_names = (ctx.scope[['Part', 'Part Name']].drop_duplicates()
+                                                  .set_index('Part')['Part Name'].to_dict())
+
+    a, b, c, d = st.columns(4)
+    a.metric("Supplier", ", ".join(sorted(ctx.scope['Supplier'].unique())))
+    b.metric("Plant", ", ".join(sorted(ctx.scope['Plant'].unique())))
+    c.metric("Region", ", ".join(sorted(ctx.scope['Region'].unique())))
+    d.metric("Country", ", ".join(sorted(ctx.scope['Country'].unique())))
+
+    # Part C section 6: one part shows inline; more than one shows the count
+    # and opens a dropdown listing them all.
+    if len(parts) == 1:
+        st.markdown(f'**Part:** {parts[0]} ({part_names.get(parts[0], "")})')
+    else:
+        with st.expander(f"Parts ({len(parts)})", expanded=False):
+            for p in parts:
+                st.markdown(f"- **{p}** — {part_names.get(p, '')}")
+
+    e, f, g, h = st.columns(4)
+    e.metric("Approved Cycle Time (ACT)", f"{row['ACT']:.2f}s")
+    f.metric("WACT", f"{row['Actual Average CT (WACT)']:.2f}s")
+    _eff = row['CT Weighted Average Efficiency']
+    g.metric("Cycle Time Efficiency", f"{_eff:.1f}%" if pd.notna(_eff) else "N/A")
+    h.metric("Net Financial", f"${row['Net Financial']:,.0f}",
+             help="Saving Opportunity − Loss. Negative = net cost overrun for the period.")
+
+    i, j, k, m, n = st.columns(5)
+    i.metric("Fast Shots", f"{row['Fast Shots (%)']:.1f}%")
+    j.metric("Within Shots", f"{row['Within Shots (%)']:.1f}%")
+    k.metric("Slow Shots", f"{row['Slow Shots (%)']:.1f}%")
+    m.metric("Saving Opportunity", f"${row['Financial Gain']:,.0f}")
+    n.metric("Loss", f"${row['Financial Loss']:,.0f}")
+
+    st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
+    ch.render_trend_block(ctx.trend, 'Tooling', ctx.keyns)
