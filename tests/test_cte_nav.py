@@ -167,3 +167,62 @@ def test_keyns_is_deterministic_for_the_same_stack(session_state):
     session_state[nav._STACK_KEY] = list(stack)
     second = nav.keyns()
     assert first == second
+
+
+# ---- nav epoch (defeats stale table selection on revisit) -----------------
+def test_epoch_starts_at_zero(session_state):
+    assert nav.nav_epoch() == 0
+
+
+def test_epoch_increments_on_push(session_state):
+    start = nav.nav_epoch()
+    nav.push("region", "APAC")
+    assert nav.nav_epoch() == start + 1
+    nav.push("country", "China")
+    assert nav.nav_epoch() == start + 2
+
+
+def test_epoch_increments_on_pop_to(session_state):
+    nav.push("region", "APAC")
+    nav.push("country", "China")
+    before = nav.nav_epoch()
+    nav.pop_to(1)
+    assert nav.nav_epoch() == before + 1
+
+
+def test_epoch_increments_on_set_root(session_state):
+    nav.push("region", "APAC")
+    before = nav.nav_epoch()
+    nav.set_root("type_all")
+    assert nav.nav_epoch() == before + 1
+
+
+def test_navigating_away_and_back_keeps_keyns_but_bumps_epoch(session_state):
+    """The whole point of the fix: revisiting the same page produces the
+    same widget-key namespace (unchanged behavior) but a different epoch,
+    so drill tables get a fresh key that carries no stale selection."""
+    nav.push("region", "APAC")
+    key_first = nav.keyns()
+    epoch_first = nav.nav_epoch()
+
+    nav.push("country", "China")
+    nav.pop_to(1)  # back to ("global", None), ("region", "APAC") -- same stack
+
+    assert nav.get_stack() == [("global", None), ("region", "APAC")]
+    key_second = nav.keyns()
+    epoch_second = nav.nav_epoch()
+
+    assert key_second == key_first
+    assert epoch_second != epoch_first
+
+
+def test_keyns_is_unaffected_by_epoch(session_state):
+    stack = [("global", None), ("region", "APAC")]
+    session_state[nav._STACK_KEY] = list(stack)
+    session_state[nav._EPOCH_KEY] = 0
+    key_at_epoch_0 = nav.keyns()
+
+    session_state[nav._EPOCH_KEY] = 99
+    key_at_epoch_99 = nav.keyns()
+
+    assert key_at_epoch_0 == key_at_epoch_99

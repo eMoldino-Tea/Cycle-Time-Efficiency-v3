@@ -59,6 +59,7 @@ ROOTS = [
 ]
 
 _STACK_KEY = 'v3_nav_stack'
+_EPOCH_KEY = 'v3_nav_epoch'
 
 
 # ---- pure helpers (no Streamlit) -----------------------------------------
@@ -97,13 +98,28 @@ def get_stack():
     return st.session_state[_STACK_KEY]
 
 
+def nav_epoch():
+    """A small integer bumped on every stack mutation (push / pop_to /
+    set_root). Revisiting a previously-visited stack reproduces the same
+    keyns() (by design -- see its docstring), but the epoch differs, so
+    callers that need a fresh widget key per navigation event (rather than
+    per distinct page) can fold this into their key instead of keyns()."""
+    return st.session_state.get(_EPOCH_KEY, 0)
+
+
+def _bump_epoch():
+    st.session_state[_EPOCH_KEY] = st.session_state.get(_EPOCH_KEY, 0) + 1
+
+
 def set_root(level):
     """Switch root tab: discard the stack and start fresh at `level`."""
     st.session_state[_STACK_KEY] = [(level, None)]
+    _bump_epoch()
 
 
 def push(level, value):
     get_stack().append((level, value))
+    _bump_epoch()
 
 
 def pop_to(index):
@@ -115,6 +131,7 @@ def pop_to(index):
     if not frames:
         frames = stack[:1]
     st.session_state[_STACK_KEY] = frames
+    _bump_epoch()
 
 
 def current():

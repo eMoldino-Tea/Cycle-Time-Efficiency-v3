@@ -42,12 +42,23 @@ def _drill(level, value):
 
 
 def _table_drill(df, label_col, level, keyns):
-    """Render a table whose row click drills into `level`."""
+    """Render a table whose row click drills into `level`.
+
+    The widget key folds in nav.nav_epoch() (in addition to keyns) so that
+    every navigation event -- including navigating back to a previously
+    visited page, where keyns() alone would reproduce an identical key --
+    gets a fresh table with no inherited row selection. Without this, a
+    stale selection surviving in session state would immediately re-fire
+    _drill and bounce the user right back into the child level they just
+    left. keyns() itself must stay untouched by the epoch: it also
+    namespaces the granularity and Rank-by radios, which need to keep the
+    user's choice across navigation rather than resetting every drill.
+    """
     event = st.dataframe(
         ui.style_table(ui.v3_display(df), ui.DETAIL_FMT),
         use_container_width=True, hide_index=True,
         on_select="rerun", selection_mode="single-row",
-        key=f"tbl_{keyns}", column_config=ui.neg_help(df))
+        key=f"tbl_{keyns}_{nav.nav_epoch()}", column_config=ui.neg_help(df))
     if event and event.selection and event.selection.rows:
         idx = event.selection.rows[0]
         if idx < len(df):
