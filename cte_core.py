@@ -706,6 +706,92 @@ def resolve_time_range(preset, max_date):
 
 
 # ==========================================================================
+# 6b. CT SPLIT & SHOT TREND  (v3 -- Trend Graph 2)
+# ==========================================================================
+# Shot-share Fast/Within/Slow per time bucket. Reuses the per-record
+# Shots_Gained / Shots_Lost / Total_Shots columns that apply_tolerance already
+# classifies at the active tolerance band -- this only regroups them by
+# month/quarter instead of by entity. Efficiency per bucket pools the bucket's
+# raw hours and calls calc_weighted_eff ONCE (never an average of tool scores).
+CT_SPLIT_COLS = [
+    'bucket', 'Total Shots', 'CT Efficiency %',
+    'Fast Shots (%)', 'Within Shots (%)', 'Slow Shots (%)',
+    'Saving Opportunity ($)', 'Loss ($)',
+]
+
+
+def ct_split_shot_trend(df, freq='M'):
+    """Per-bucket shot split + efficiency + financials for Trend Graph 2.
+
+    freq: 'M' (month) or 'Q' (calendar quarter), matching the app's existing
+    Month-to-Month / Quarter-to-Quarter toggle.
+
+    Returns a DataFrame with CT_SPLIT_COLS. Buckets with zero shots are
+    dropped so an idle month never renders a 0/0/0 split.
+    """
+    if df is None or df.empty or 'Date' not in df.columns:
+        return pd.DataFrame(columns=CT_SPLIT_COLS)
+    d = df.copy()
+    d['bucket'] = d['Date'].dt.to_period(freq).dt.start_time
+
+    rows = []
+    for bucket, g in d.groupby('bucket'):
+        tot = g['Total_Shots'].sum()
+        if tot <= 0:
+            continue
+        fast_pct = g['Shots_Gained'].sum() / tot * 100.0
+        slow_pct = g['Shots_Lost'].sum() / tot * 100.0
+        rows.append({
+            'bucket': bucket,
+            'Total Shots': int(tot),
+            'CT Efficiency %': calc_weighted_eff(g),
+            'Fast Shots (%)': fast_pct,
+            'Slow Shots (%)': slow_pct,
+            'Within Shots (%)': 100.0 - fast_pct - slow_pct,
+            'Saving Opportunity ($)': float(g['Financial_Gain'].sum()) if 'Financial_Gain' in g else 0.0,
+            'Loss ($)': float(g['Financial_Loss'].sum()) if 'Financial_Loss' in g else 0.0,
+        })
+    if not rows:
+        return pd.DataFrame(columns=CT_SPLIT_COLS)
+    return (pd.DataFrame(rows)[CT_SPLIT_COLS]
+              .sort_values('bucket')
+              .reset_index(drop=True))
+
+
+def ct_split_summary(df, freq='M'):
+    """Headline stat line above Trend Graph 2.
+
+    NOTE ON NAMING: `ct_compliance` here is Faster% + Within% -- the share of
+    shots produced at or better than the approved cycle time. It is a
+    DIFFERENT metric from the app's canonical Weighted CT Efficiency
+    (calc_weighted_eff) and from the backend spec's own within-band-only
+    `ct_compliance`. Always render it with the Graph 2 footnote so the three
+    are never confused.
+
+    Returns dict: pct_fast, pct_within, pct_slow, ct_compliance, total_shots,
+    active_buckets. Percentages are 0.0 when there are no shots.
+    """
+    empty = {'pct_fast': 0.0, 'pct_within': 0.0, 'pct_slow': 0.0,
+             'ct_compliance': 0.0, 'total_shots': 0, 'active_buckets': 0}
+    if df is None or df.empty:
+        return empty
+    tot = df['Total_Shots'].sum()
+    if tot <= 0:
+        return empty
+    pct_fast = df['Shots_Gained'].sum() / tot * 100.0
+    pct_slow = df['Shots_Lost'].sum() / tot * 100.0
+    pct_within = 100.0 - pct_fast - pct_slow
+    return {
+        'pct_fast': float(pct_fast),
+        'pct_within': float(pct_within),
+        'pct_slow': float(pct_slow),
+        'ct_compliance': float(pct_fast + pct_within),
+        'total_shots': int(tot),
+        'active_buckets': int(len(ct_split_shot_trend(df, freq))),
+    }
+
+
+# ==========================================================================
 # 7. COLUMN FORMAT CONFIGS  (verbatim) -- functions so they bind at runtime
 # ==========================================================================
 def detail_col_config():

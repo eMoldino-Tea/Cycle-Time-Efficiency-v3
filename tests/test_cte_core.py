@@ -129,3 +129,70 @@ def test_rolling_presets():
 def test_unknown_preset_raises():
     with pytest.raises(ValueError):
         core.resolve_time_range("Last 90 Days", pd.Timestamp("2026-07-06"))
+
+
+def _two_bucket_frame():
+    """Hand-built frame: Jan = 1 fast + 1 within record, Feb = 1 slow record."""
+    return pd.DataFrame([
+        # Jan: fast, 3000 shots, 100 used hours vs 110 expected -> eff 110%
+        dict(Date=pd.Timestamp("2026-01-10"), Tolerance_Status="Fast",
+             Total_Shots=3000, Shots_Gained=3000, Shots_Lost=0,
+             Used_Hours=100.0, Expected_Hours=110.0,
+             Financial_Gain=2200.0, Financial_Loss=0.0, Tooling="T1"),
+        # Jan: within, 1000 shots
+        dict(Date=pd.Timestamp("2026-01-20"), Tolerance_Status="Within",
+             Total_Shots=1000, Shots_Gained=0, Shots_Lost=0,
+             Used_Hours=50.0, Expected_Hours=50.0,
+             Financial_Gain=0.0, Financial_Loss=0.0, Tooling="T2"),
+        # Feb: slow, 2000 shots, 100 used vs 80 expected -> eff 80%
+        dict(Date=pd.Timestamp("2026-02-05"), Tolerance_Status="Slow",
+             Total_Shots=2000, Shots_Gained=0, Shots_Lost=2000,
+             Used_Hours=100.0, Expected_Hours=80.0,
+             Financial_Gain=0.0, Financial_Loss=4400.0, Tooling="T1"),
+    ])
+
+
+def test_ct_split_shot_trend_monthly_shares():
+    t = core.ct_split_shot_trend(_two_bucket_frame(), freq="M")
+    assert len(t) == 2
+    jan, feb = t.iloc[0], t.iloc[1]
+    assert jan["Total Shots"] == 4000
+    assert jan["Fast Shots (%)"] == pytest.approx(75.0)
+    assert jan["Within Shots (%)"] == pytest.approx(25.0)
+    assert jan["Slow Shots (%)"] == pytest.approx(0.0)
+    # pooled weighted eff, not an average of the two records
+    assert jan["CT Efficiency %"] == pytest.approx(110.0 * 0.75 + 100.0 * 0.25)
+    assert jan["Saving Opportunity ($)"] == pytest.approx(2200.0)
+    assert feb["Slow Shots (%)"] == pytest.approx(100.0)
+    assert feb["CT Efficiency %"] == pytest.approx(80.0)
+    assert feb["Loss ($)"] == pytest.approx(4400.0)
+
+
+def test_ct_split_shot_trend_quarterly_pools_months_together():
+    t = core.ct_split_shot_trend(_two_bucket_frame(), freq="Q")
+    assert len(t) == 1
+    assert t.iloc[0]["Total Shots"] == 6000
+    assert t.iloc[0]["Fast Shots (%)"] == pytest.approx(50.0)
+    assert t.iloc[0]["Slow Shots (%)"] == pytest.approx(2000 / 6000 * 100)
+
+
+def test_ct_split_shot_trend_empty_frame_returns_empty_with_columns():
+    t = core.ct_split_shot_trend(pd.DataFrame(), freq="M")
+    assert t.empty
+    assert "Fast Shots (%)" in t.columns
+
+
+def test_ct_split_summary_compliance_is_fast_plus_within():
+    s = core.ct_split_summary(_two_bucket_frame(), freq="M")
+    assert s["total_shots"] == 6000
+    assert s["active_buckets"] == 2
+    assert s["pct_fast"] == pytest.approx(50.0)
+    assert s["pct_slow"] == pytest.approx(2000 / 6000 * 100)
+    assert s["pct_within"] == pytest.approx(1000 / 6000 * 100)
+    assert s["ct_compliance"] == pytest.approx(s["pct_fast"] + s["pct_within"])
+
+
+def test_bucket_shares_always_sum_to_100(demo):
+    t = core.ct_split_shot_trend(demo, freq="M")
+    total = t["Fast Shots (%)"] + t["Within Shots (%)"] + t["Slow Shots (%)"]
+    assert np.allclose(total.values, 100.0)
