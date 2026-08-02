@@ -31,9 +31,25 @@ def test_level_registry_chain_is_complete():
     assert nav.LEVELS["part_tools"]["child"] == "tool"
 
 
-def test_every_level_declares_a_trend_dim():
+def test_every_level_declares_the_exact_required_trend_dim():
+    expected_trend_dim = {
+        "global": "Supplier",
+        "region": "Supplier",
+        "country": "Supplier",
+        "supplier": "Tooling",
+        "type_all": "Tooling Type",
+        "type": "Tooling",
+        "part_all": "Part",
+        "part": "Tooling",
+        "part_tools": "Tooling",
+        "tool": "Tooling",
+    }
+    required_keys = {"label", "col", "child", "trend_dim", "entity_noun"}
+
+    assert set(nav.LEVELS.keys()) == set(expected_trend_dim.keys())
     for key, cfg in nav.LEVELS.items():
-        assert cfg["trend_dim"] in {"Supplier", "Tooling", "Tooling Type", "Part"}, key
+        assert required_keys.issubset(cfg.keys()), key
+        assert cfg["trend_dim"] == expected_trend_dim[key], key
 
 
 def test_scope_df_applies_each_frame_in_order(frame):
@@ -68,3 +84,86 @@ def test_crumb_labels_uses_values_after_the_root():
 def test_scope_df_on_missing_column_is_a_no_op(frame):
     out = nav.scope_df(frame.drop(columns=["Country"]), [("global", None), ("country", "China")])
     assert len(out) == 4
+
+
+# ---- session-state-bound functions ----------------------------------------
+@pytest.fixture
+def session_state(monkeypatch):
+    """A plain dict standing in for st.session_state, isolated per test so
+    stacks don't leak between tests."""
+    state = {}
+    monkeypatch.setattr(nav.st, "session_state", state)
+    return state
+
+
+def test_get_stack_initializes_to_the_global_root(session_state):
+    assert nav.get_stack() == [("global", None)]
+    assert session_state[nav._STACK_KEY] == [("global", None)]
+
+
+def test_get_stack_returns_the_same_stack_on_repeated_calls(session_state):
+    first = nav.get_stack()
+    first.append(("region", "APAC"))
+    assert nav.get_stack() == [("global", None), ("region", "APAC")]
+
+
+def test_push_then_current_returns_the_pushed_frame(session_state):
+    nav.push("region", "APAC")
+    assert nav.current() == ("region", "APAC")
+    assert nav.current_root() == "global"
+    assert nav.get_stack() == [("global", None), ("region", "APAC")]
+
+
+def test_pop_to_truncates_to_the_given_index_inclusive(session_state):
+    nav.push("region", "APAC")
+    nav.push("country", "China")
+    nav.push("supplier", "Foxconn")
+    nav.pop_to(1)
+    assert nav.get_stack() == [("global", None), ("region", "APAC")]
+    assert nav.current() == ("region", "APAC")
+
+
+def test_pop_to_never_leaves_an_empty_stack(session_state):
+    nav.push("region", "APAC")
+    nav.pop_to(-1)
+    assert nav.get_stack() == [("global", None)]
+
+    nav.push("region", "APAC")
+    nav.push("country", "China")
+    nav.pop_to(-100)
+    assert len(nav.get_stack()) >= 1
+    assert nav.get_stack()[0] == ("global", None)
+
+
+def test_set_root_discards_an_existing_deep_stack(session_state):
+    nav.push("region", "APAC")
+    nav.push("country", "China")
+    nav.set_root("type_all")
+    assert nav.get_stack() == [("type_all", None)]
+    assert nav.current_root() == "type_all"
+
+
+def test_keyns_differs_for_structurally_different_stacks(session_state):
+    # Both stacks naively join to the identical string "a-1_b-2" via
+    # f"{lvl}-{val}" joined with "_" -- a one-frame stack whose value
+    # happens to contain the frame separator, versus a genuinely two-frame
+    # stack. keyns() must still tell them apart.
+    stack_one = [("a", "1_b-2")]
+    stack_two = [("a", "1"), ("b", "2")]
+
+    session_state[nav._STACK_KEY] = stack_one
+    key_one = nav.keyns()
+
+    session_state[nav._STACK_KEY] = stack_two
+    key_two = nav.keyns()
+
+    assert key_one != key_two
+
+
+def test_keyns_is_deterministic_for_the_same_stack(session_state):
+    stack = [("global", None), ("region", "APAC"), ("supplier", "Bosch Tooling")]
+    session_state[nav._STACK_KEY] = list(stack)
+    first = nav.keyns()
+    session_state[nav._STACK_KEY] = list(stack)
+    second = nav.keyns()
+    assert first == second

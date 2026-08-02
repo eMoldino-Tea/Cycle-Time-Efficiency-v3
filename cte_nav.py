@@ -15,6 +15,8 @@ The pure functions (scope_df, crumb_labels) take the stack explicitly so they
 are testable without a Streamlit runtime.
 """
 
+import hashlib
+
 import streamlit as st
 
 # label      : breadcrumb / heading wording for the level itself
@@ -105,7 +107,14 @@ def push(level, value):
 
 
 def pop_to(index):
-    st.session_state[_STACK_KEY] = get_stack()[:index + 1]
+    """Truncate the stack to `index` inclusive. Never leaves the stack empty
+    -- the root frame is always kept, even for out-of-range or negative
+    indices."""
+    stack = get_stack()
+    frames = stack[:index + 1]
+    if not frames:
+        frames = stack[:1]
+    st.session_state[_STACK_KEY] = frames
 
 
 def current():
@@ -119,5 +128,17 @@ def current_root():
 
 def keyns():
     """A stable widget-key namespace for the current page, so Streamlit
-    widgets on different drill paths never collide."""
-    return "_".join(f"{lvl}-{val}" for lvl, val in get_stack()).replace(" ", "")
+    widgets on different drill paths never collide.
+
+    The readable "level-value_level-value..." prefix is kept for debugging,
+    but uniqueness is guaranteed by a short hash of the full stack appended
+    to it -- the prefix alone can alias (e.g. a value containing "-" or "_"
+    can make a one-frame stack format identically to a two-frame stack), so
+    the hash is what actually makes the collision-safety claim true. The
+    hash uses hashlib (not the built-in `hash()`, which is salted per
+    process and would make the namespace change across reruns/sessions) so
+    the result is deterministic for a given stack."""
+    stack = tuple(get_stack())
+    prefix = "_".join(f"{lvl}-{val}" for lvl, val in stack).replace(" ", "")
+    digest = hashlib.sha256(repr(stack).encode("utf-8")).hexdigest()[:10]
+    return f"{prefix}_{digest}"
