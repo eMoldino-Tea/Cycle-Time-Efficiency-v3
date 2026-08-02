@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "cte-dashboard",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "streamlit", "run", "Cycle-Time-Efficiency-v3.py", "--server.headless", "true"],
+      "port": 8501,
+      "autoPort": true
+    }
+  ]
+}
