@@ -196,3 +196,65 @@ def test_bucket_shares_always_sum_to_100(demo):
     t = core.ct_split_shot_trend(demo, freq="M")
     total = t["Fast Shots (%)"] + t["Within Shots (%)"] + t["Slow Shots (%)"]
     assert np.allclose(total.values, 100.0)
+
+
+@pytest.fixture(scope="module")
+def priced(demo):
+    return core.apply_financials(core.apply_tolerance(demo, 5.0), 40.0, 180.0)
+
+
+def test_scope_summary_counts_tools_and_sums_dollars(priced):
+    s = core.scope_summary(priced, 5.0)
+    assert s["total"] == priced["Tooling"].nunique()
+    assert s["fast"] + s["within"] + s["slow"] == s["total"]
+    assert s["saving_opportunity"] == pytest.approx(priced["Financial_Gain"].sum())
+    assert s["loss"] == pytest.approx(priced["Financial_Loss"].sum())
+    assert s["net"] == pytest.approx(s["saving_opportunity"] - s["loss"])
+
+
+def test_scope_summary_can_count_parts_instead_of_tools(priced):
+    s = core.scope_summary(priced, 5.0, entity_dim="Part")
+    assert s["total"] == priced["Part"].nunique()
+
+
+def test_scope_summary_matches_fast_within_slow_summary(priced):
+    a = core.scope_summary(priced, 5.0)
+    b = core.fast_within_slow_summary(priced, "Tooling", 5.0)
+    assert (a["fast"], a["within"], a["slow"]) == (b["fast"], b["within"], b["slow"])
+
+
+def test_ranking_by_financial_sorts_descending_and_reranks(priced):
+    r = core.ranking_by_financial(priced, "Supplier", "Financial Gained", top_n=5)
+    assert len(r) == 5
+    assert r["Rank"].tolist() == [1, 2, 3, 4, 5]
+    assert r["Financial Gained"].is_monotonic_decreasing
+
+
+def test_ranking_by_financial_loss_variant(priced):
+    r = core.ranking_by_financial(priced, "Country", "Financial Lost")
+    assert r["Financial Lost"].is_monotonic_decreasing
+    assert set(r["Country"]) <= set(priced["Country"].unique())
+
+
+def test_entity_detail_table_collapses_extra_cols(priced):
+    t = core.entity_detail_table(priced, "Supplier", extra_cols=("Country",))
+    assert len(t) == priced["Supplier"].nunique()
+    assert "Country" in t.columns
+    # a supplier spanning two countries renders both, comma-joined
+    assert t["Country"].str.contains(",").any()
+    assert "CT Weighted Average Efficiency" in t.columns
+
+
+def test_entity_detail_table_efficiency_matches_calc_weighted_eff(priced):
+    t = core.entity_detail_table(priced, "Supplier")
+    for sup in t["Supplier"].head(3):
+        expected = core.calc_weighted_eff(priced[priced["Supplier"] == sup])
+        got = t.loc[t["Supplier"] == sup, "CT Weighted Average Efficiency"].iloc[0]
+        assert got == pytest.approx(expected, abs=1e-9)
+
+
+def test_v3_column_constants_exist():
+    for const in ("V3_SUPPLIER_COLS", "V3_TOOL_COLS", "V3_TYPE_COLS", "V3_PART_COLS"):
+        assert isinstance(getattr(core, const), list)
+    assert "Tooling ID" in core.V3_TOOL_COLS
+    assert "Country" in core.V3_TOOL_COLS

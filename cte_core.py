@@ -792,6 +792,94 @@ def ct_split_summary(df, freq='M'):
 
 
 # ==========================================================================
+# 6c. V3 SCOPE HELPERS  (assembly only -- every number comes from the
+#     existing functions above)
+# ==========================================================================
+def scope_summary(df, tolerance_pct=DEFAULT_TOLERANCE_PCT, entity_dim='Tooling'):
+    """The six summary tiles shared by every v3 level.
+
+    Counts are per-entity classifications from fast_within_slow_summary
+    (default entity = Tooling; pass entity_dim='Part' for the Part Overview).
+    Dollars are pooled record sums, so they are independent of the entity
+    classification and never double-count.
+    """
+    s = fast_within_slow_summary(df, entity_dim, tolerance_pct)
+    gain = float(df['Financial_Gain'].sum()) if not df.empty and 'Financial_Gain' in df else 0.0
+    loss = float(df['Financial_Loss'].sum()) if not df.empty and 'Financial_Loss' in df else 0.0
+    s['saving_opportunity'] = gain
+    s['loss'] = loss
+    s['net'] = gain - loss
+    return s
+
+
+def ranking_by_financial(df, col, metric='Financial Gained',
+                         top_n=None, tolerance_pct=DEFAULT_TOLERANCE_PCT):
+    """Ranking list ordered by dollars rather than efficiency.
+
+    Thin wrapper over generate_ranking_table_data (whose math is unchanged);
+    it only re-sorts and re-numbers. metric is 'Financial Gained' (saving
+    opportunity) or 'Financial Lost'.
+    """
+    agg = generate_ranking_table_data(df, col, tolerance_pct)
+    if agg.empty or metric not in agg.columns:
+        return agg
+    out = agg.sort_values(metric, ascending=False)
+    if top_n:
+        out = out.head(top_n)
+    out = out.reset_index(drop=True)
+    out['Rank'] = range(1, len(out) + 1)
+    return out
+
+
+def entity_detail_table(df, dim, extra_cols=(), period_label="",
+                        tolerance_pct=DEFAULT_TOLERANCE_PCT):
+    """One comprehensive row per entity in `dim`, plus descriptive columns.
+
+    Each row is compute_comprehensive_row (unchanged math) for that entity's
+    pooled slice. `extra_cols` are descriptive dimensions (Country, Region,
+    Plant, ...) collapsed to the distinct values present for that entity and
+    comma-joined -- so a supplier operating in two countries shows both,
+    rather than silently dropping one.
+    """
+    if df.empty:
+        return pd.DataFrame()
+    rows = []
+    for name, g in df.groupby(dim):
+        row = compute_comprehensive_row(name, g, dim, period_label,
+                                        tolerance_pct=tolerance_pct)
+        for c in extra_cols:
+            if c in g.columns:
+                row[c] = ", ".join(sorted(str(v) for v in g[c].dropna().unique()))
+        row['Total Toolings'] = g['Tooling'].nunique()
+        rows.append(row)
+    out = pd.DataFrame(rows)
+    return out.sort_values('CT Weighted Average Efficiency').reset_index(drop=True)
+
+
+# ---- v3 display column sets (see cte_ui.V3_DISPLAY_RENAME for the labels) --
+V3_SUPPLIER_COLS = [
+    'Supplier', 'Country', 'Total Toolings', 'Total Shots',
+    'CT Weighted Average Efficiency', 'Financial Gain', 'Financial Loss',
+    'Fast Shots (%)', 'Within Shots (%)', 'Slow Shots (%)',
+]
+V3_TOOL_COLS = [
+    'Tooling ID', 'Region', 'Country', 'Plant', 'ACT', 'Actual Average CT (WACT)',
+    'CT Weighted Average Efficiency', 'Fast Shots (%)', 'Within Shots (%)',
+    'Slow Shots (%)', 'Financial Gain', 'Financial Loss', 'Net Financial',
+]
+V3_TYPE_COLS = [
+    'Tooling Type', 'Total Toolings', 'Total Shots',
+    'CT Weighted Average Efficiency', 'Fast Shots (%)', 'Within Shots (%)',
+    'Slow Shots (%)', 'Financial Gain', 'Financial Loss',
+]
+V3_PART_COLS = [
+    'Part', 'Part Name', 'Total Toolings', 'Total Shots',
+    'CT Weighted Average Efficiency', 'Fast Shots (%)', 'Within Shots (%)',
+    'Slow Shots (%)', 'Financial Gain', 'Financial Loss',
+]
+
+
+# ==========================================================================
 # 7. COLUMN FORMAT CONFIGS  (verbatim) -- functions so they bind at runtime
 # ==========================================================================
 def detail_col_config():
