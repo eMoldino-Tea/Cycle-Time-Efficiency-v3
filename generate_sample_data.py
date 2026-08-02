@@ -52,10 +52,15 @@ PART_NAMES = {
 PARTS = list(PART_NAMES.keys())
 PLANTS = ['Plant 1 (MX)', 'Plant 2 (US)', 'Plant 3 (DE)', 'Plant 4 (PL)',
           'Plant 5 (CN)', 'Plant 6 (VN)', 'Plant 7 (BR)']
-PLANT_TO_REGION = {
-    'Plant 1 (MX)': 'North America', 'Plant 2 (US)': 'North America',
-    'Plant 3 (DE)': 'Europe', 'Plant 4 (PL)': 'Europe',
-    'Plant 5 (CN)': 'APAC', 'Plant 6 (VN)': 'APAC', 'Plant 7 (BR)': 'LATAM',
+# Plant -> (Country, Region); mirrors cte_core.PLANT_META.
+PLANT_META = {
+    'Plant 1 (MX)': ('Mexico',        'North America'),
+    'Plant 2 (US)': ('United States', 'North America'),
+    'Plant 3 (DE)': ('Germany',       'Europe'),
+    'Plant 4 (PL)': ('Poland',        'Europe'),
+    'Plant 5 (CN)': ('China',         'APAC'),
+    'Plant 6 (VN)': ('Vietnam',       'APAC'),
+    'Plant 7 (BR)': ('Brazil',        'LATAM'),
 }
 OEM_DIVISIONS = ['NA Auto', 'EU Consumer', 'APAC Enterprise', 'LATAM Industrial']
 TOOLMAKERS = ['TM-A', 'TM-B', 'TM-C', 'TM-D']
@@ -135,7 +140,8 @@ def generate(num_tools=80, weeks=52, end_date=None, seed=None):
     data['Efficiency_%'] = np.where(data['Used_Hours'] > 0,
                                      (data['Expected_Hours'] / data['Used_Hours']) * 100, 0)
     data['Part Name'] = data['Part'].map(PART_NAMES).fillna('Component')
-    data['Region'] = data['Plant'].map(PLANT_TO_REGION).fillna('Other')
+    data['Country'] = data['Plant'].map(lambda p: PLANT_META.get(p, ('Unknown', 'Other'))[0])
+    data['Region'] = data['Plant'].map(lambda p: PLANT_META.get(p, ('Unknown', 'Other'))[1])
     return data
 
 

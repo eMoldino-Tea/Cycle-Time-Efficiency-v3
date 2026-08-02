@@ -51,3 +51,35 @@ def test_demo_data_math_is_unchanged(demo):
 
 def test_regions_are_the_four_canonical_values(demo):
     assert set(demo["Region"].unique()) == {"APAC", "Europe", "North America", "LATAM"}
+
+
+def test_ensure_geo_columns_adds_country_and_region():
+    df = pd.DataFrame({"Plant": ["Plant 5 (CN)", "Plant 3 (DE)", "Plant 7 (BR)"]})
+    out = core.ensure_geo_columns(df)
+    assert out["Country"].tolist() == ["China", "Germany", "Brazil"]
+    assert out["Region"].tolist() == ["APAC", "Europe", "LATAM"]
+
+
+def test_ensure_geo_columns_is_idempotent_and_non_destructive():
+    df = pd.DataFrame({"Plant": ["Plant 5 (CN)"], "Country": ["Custom"], "Region": ["Custom"]})
+    out = core.ensure_geo_columns(df)
+    assert out["Country"].tolist() == ["Custom"]
+    assert out["Region"].tolist() == ["Custom"]
+
+
+def test_unknown_plant_falls_back_without_raising():
+    out = core.ensure_geo_columns(pd.DataFrame({"Plant": ["Plant 99 (ZZ)"]}))
+    assert out["Country"].tolist() == ["Unknown"]
+    assert out["Region"].tolist() == ["Other"]
+
+
+def test_demo_data_has_country_column(demo):
+    assert "Country" in demo.columns
+    assert set(demo["Country"].unique()) == {
+        "Mexico", "United States", "Germany", "Poland", "China", "Vietnam", "Brazil",
+    }
+
+
+def test_a_supplier_can_span_multiple_countries(demo):
+    spans = demo.groupby("Supplier")["Country"].nunique()
+    assert (spans > 1).any(), "Supplier→Country must not be modelled as a strict tree"

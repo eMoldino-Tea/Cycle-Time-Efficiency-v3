@@ -38,6 +38,42 @@ BASELINE_RATE = 220.0
 
 
 # ==========================================================================
+# GEOGRAPHY (v3)
+# ==========================================================================
+# v3 treats Region AND Country as explicit data fields rather than parsing the
+# country code out of the Plant name. This dict is the placeholder data layer:
+# when the feature connects to the platform backend, both fields will arrive
+# derived from Plant + Supplier information and this mapping goes away.
+# Plant -> (Country, Region)
+PLANT_META = {
+    'Plant 1 (MX)': ('Mexico',        'North America'),
+    'Plant 2 (US)': ('United States', 'North America'),
+    'Plant 3 (DE)': ('Germany',       'Europe'),
+    'Plant 4 (PL)': ('Poland',        'Europe'),
+    'Plant 5 (CN)': ('China',         'APAC'),
+    'Plant 6 (VN)': ('Vietnam',       'APAC'),
+    'Plant 7 (BR)': ('Brazil',        'LATAM'),
+}
+UNKNOWN_GEO = ('Unknown', 'Other')
+
+
+def ensure_geo_columns(df):
+    """Guarantee explicit `Country` and `Region` columns on a record frame.
+
+    Existing columns are left untouched, so a backend feed (or a sample CSV)
+    that already carries real geography wins over this placeholder mapping.
+    """
+    out = df.copy()
+    if 'Plant' not in out.columns:
+        return out
+    if 'Country' not in out.columns:
+        out['Country'] = out['Plant'].map(lambda p: PLANT_META.get(p, UNKNOWN_GEO)[0])
+    if 'Region' not in out.columns:
+        out['Region'] = out['Plant'].map(lambda p: PLANT_META.get(p, UNKNOWN_GEO)[1])
+    return out
+
+
+# ==========================================================================
 # 1. DATA LOADING  (verbatim from original, unchanged)
 # ==========================================================================
 @st.cache_data
@@ -265,17 +301,10 @@ def load_base_data(version: int = 3):
     }
     data['Part Name'] = data['Part'].map(part_names).fillna('Component')
 
-    # ---- DERIVED (display-only) Region -------------------------------------
-    # The source dataset has no native "Region" column. The executive spec asks
-    # for a Region filter, so we derive one from the Plant country code. This is
-    # a UI convenience only and touches no calculation. Swap this one mapping
-    # when the real dataset provides a native Region field.
-    plant_to_region = {
-        'Plant 1 (MX)': 'North America', 'Plant 2 (US)': 'North America',
-        'Plant 3 (DE)': 'Europe', 'Plant 4 (PL)': 'Europe',
-        'Plant 5 (CN)': 'APAC', 'Plant 6 (VN)': 'APAC', 'Plant 7 (BR)': 'LATAM',
-    }
-    data['Region'] = data['Plant'].map(plant_to_region).fillna('Other')
+    # ---- EXPLICIT geography (v3): Country + Region --------------------------
+    # See PLANT_META at the top of this module. Both fields are real columns,
+    # not string-parsed at point of use.
+    data = ensure_geo_columns(data)
 
     return data
 
