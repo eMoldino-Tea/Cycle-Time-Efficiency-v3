@@ -14,7 +14,6 @@ Both are scoped to whatever the current level is; the caller passes the
 already-scoped, full-history frame.
 """
 
-import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -210,7 +209,7 @@ def small_multiple_pies(df, dim, tolerance_pct, keyns, max_pies=8):
                         f'font-weight:600;margin-bottom:2px;">{ent}</div>',
                         unsafe_allow_html=True)
             st.plotly_chart(_pie_figure([s['fast'], s['within'], s['slow']]),
-                            use_container_width=True, key=f"pie_{keyns}_{ent}")
+                            use_container_width=True, key=f"pie_{keyns}_{dim}_{ent}")
             st.markdown(f'<div style="text-align:center;color:#64748b;font-size:.78rem;">'
                         f'{s["total"]} tools</div>', unsafe_allow_html=True)
     if len(entities) > max_pies:
@@ -220,6 +219,9 @@ def small_multiple_pies(df, dim, tolerance_pct, keyns, max_pies=8):
 
 def single_pie(df, tolerance_pct, keyns, title="Cycle Time Efficiency Split"):
     s = core.fast_within_slow_summary(df, 'Tooling', tolerance_pct)
+    if s['total'] == 0:
+        st.info("No data available for this metric.")
+        return
     st.markdown(f'<div style="text-align:center;color:#e2e8f0;font-size:1.05rem;'
                 f'font-weight:600;margin-bottom:4px;">{title}</div>', unsafe_allow_html=True)
     st.plotly_chart(_pie_figure([s['fast'], s['within'], s['slow']], height=320),
