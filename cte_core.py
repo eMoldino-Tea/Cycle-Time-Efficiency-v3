@@ -676,6 +676,36 @@ def act_weighted_deviation_trend(df, dim, freq='M'):
 
 
 # ==========================================================================
+# TIME RANGE PRESETS (v3)
+# ==========================================================================
+TIME_RANGE_PRESETS = [
+    "Last 7 Days", "Last 30 Days", "Last Quarter", "Last 12 Months", "Custom Range",
+]
+
+
+def resolve_time_range(preset, max_date):
+    """Resolve a v3 Time Range preset to a (start, end) timestamp pair.
+
+    "Last Quarter" is the previous COMPLETE calendar quarter relative to
+    max_date — the quarter currently in progress is excluded entirely.
+    Calendar quarters are Jan-Mar / Apr-Jun / Jul-Sep / Oct-Dec, matching the
+    app's existing quarter bucketing.
+    """
+    mx = pd.Timestamp(max_date)
+    if preset == "Last 7 Days":
+        return mx - pd.Timedelta(days=7), mx
+    if preset == "Last 30 Days":
+        return mx - pd.Timedelta(days=30), mx
+    if preset == "Last Quarter":
+        curr_q_start = mx.to_period('Q').start_time
+        prev_q = (curr_q_start - pd.Timedelta(days=1)).to_period('Q')
+        return prev_q.start_time, prev_q.end_time
+    if preset == "Last 12 Months":
+        return mx - pd.DateOffset(months=12), mx
+    raise ValueError(f"Unknown time-range preset: {preset!r}")
+
+
+# ==========================================================================
 # 7. COLUMN FORMAT CONFIGS  (verbatim) -- functions so they bind at runtime
 # ==========================================================================
 def detail_col_config():

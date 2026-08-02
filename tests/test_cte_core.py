@@ -96,3 +96,36 @@ def test_multi_part_tools_did_not_disturb_the_math(demo):
     # Identical assertions to the baseline lock: Part labels moved, numbers did not.
     assert demo["Used_Hours"].sum() == pytest.approx(BASELINE_USED_HOURS, abs=1e-6)
     assert core.calc_weighted_eff(demo) == pytest.approx(BASELINE_WEIGHTED_EFF, abs=1e-9)
+
+
+def test_time_range_presets_have_no_last_90_days():
+    assert core.TIME_RANGE_PRESETS == [
+        "Last 7 Days", "Last 30 Days", "Last Quarter", "Last 12 Months", "Custom Range",
+    ]
+
+
+def test_last_quarter_is_the_previous_complete_calendar_quarter():
+    # 2026-07-06 sits in Q3 2026, so "Last Quarter" is Q2 2026 (Apr-Jun).
+    start, end = core.resolve_time_range("Last Quarter", pd.Timestamp("2026-07-06"))
+    assert start == pd.Timestamp("2026-04-01")
+    assert end.date() == pd.Timestamp("2026-06-30").date()
+    assert end > pd.Timestamp("2026-06-30 23:00:00")
+
+
+def test_last_quarter_wraps_across_the_year_boundary():
+    start, end = core.resolve_time_range("Last Quarter", pd.Timestamp("2026-01-15"))
+    assert start == pd.Timestamp("2025-10-01")
+    assert end.date() == pd.Timestamp("2025-12-31").date()
+
+
+def test_rolling_presets():
+    mx = pd.Timestamp("2026-07-06")
+    assert core.resolve_time_range("Last 7 Days", mx)[0] == pd.Timestamp("2026-06-29")
+    assert core.resolve_time_range("Last 30 Days", mx)[0] == pd.Timestamp("2026-06-06")
+    assert core.resolve_time_range("Last 12 Months", mx)[0] == pd.Timestamp("2025-07-06")
+    assert core.resolve_time_range("Last 7 Days", mx)[1] == mx
+
+
+def test_unknown_preset_raises():
+    with pytest.raises(ValueError):
+        core.resolve_time_range("Last 90 Days", pd.Timestamp("2026-07-06"))
