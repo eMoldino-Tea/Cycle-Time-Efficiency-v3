@@ -820,6 +820,8 @@ def ranking_by_financial(df, col, metric='Financial Gained',
     it only re-sorts and re-numbers. metric is 'Financial Gained' (saving
     opportunity) or 'Financial Lost'.
     """
+    if df.empty:
+        return pd.DataFrame()
     agg = generate_ranking_table_data(df, col, tolerance_pct)
     if agg.empty or metric not in agg.columns:
         return agg

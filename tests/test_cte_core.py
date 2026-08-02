@@ -258,3 +258,41 @@ def test_v3_column_constants_exist():
         assert isinstance(getattr(core, const), list)
     assert "Tooling ID" in core.V3_TOOL_COLS
     assert "Country" in core.V3_TOOL_COLS
+
+
+def test_ranking_by_financial_empty_dataframe_returns_empty():
+    """ranking_by_financial should return an empty DataFrame instead of raising on empty input."""
+    empty_df = pd.DataFrame(columns=[
+        'Supplier', 'Financial_Gain', 'Financial_Loss', 'Tooling',
+        'Gain_Hours', 'Loss_Hours', 'Shots_Gained', 'Shots_Lost',
+        'Used_Hours', 'Expected_Hours', 'Total_Shots', 'Tolerance_Status'
+    ])
+    result = core.ranking_by_financial(empty_df, 'Supplier', 'Financial Gained')
+    assert result.empty
+    assert isinstance(result, pd.DataFrame)
+
+
+def test_scope_summary_empty_dataframe_returns_zero_counts():
+    """scope_summary should handle empty DataFrame gracefully."""
+    empty_df = pd.DataFrame(columns=['Financial_Gain', 'Financial_Loss', 'Tooling'])
+    result = core.scope_summary(empty_df)
+    assert result['total'] == 0
+    assert result['fast'] == 0
+    assert result['within'] == 0
+    assert result['slow'] == 0
+    assert result['saving_opportunity'] == 0.0
+    assert result['loss'] == 0.0
+    assert result['net'] == 0.0
+
+
+def test_entity_detail_table_empty_dataframe_returns_empty():
+    """entity_detail_table should return an empty DataFrame instead of raising on empty input."""
+    empty_df = pd.DataFrame(columns=[
+        'Supplier', 'Total_Shots', 'ACT', 'Used_Hours', 'Expected_Hours',
+        'Gain_Hours', 'Loss_Hours', 'Shots_Gained', 'Shots_Lost',
+        'Financial_Gain', 'Financial_Loss', 'Tolerance_Status', 'Tooling',
+        'Active_Rate', 'Part', 'Part Name', 'Product'
+    ])
+    result = core.entity_detail_table(empty_df, 'Supplier')
+    assert result.empty
+    assert isinstance(result, pd.DataFrame)
