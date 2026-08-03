@@ -223,3 +223,138 @@ def render_tool(ctx):
 
     st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
     ch.render_trend_block(ctx.trend, 'Tooling', ctx.keyns)
+
+
+def render_type_all(ctx):
+    """Part C section 5 — Tooling Type overview across all types."""
+    ui.section("Summary")
+    ui.summary_tiles(core.scope_summary(ctx.scope, ctx.tolerance_pct), "Tools")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    ui.section("Cycle Time Efficiency by Tooling Type", size="1.1rem")
+    ch.small_multiple_pies(ctx.scope, 'Tooling Type', ctx.tolerance_pct, ctx.keyns)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    ui.section("Saving Opportunity & Loss by Tooling Type", size="1.1rem")
+    ch.ranking_bars(ctx.scope, ['Tooling Type'], ctx.tolerance_pct, ctx.keyns)
+
+    st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
+    ch.render_trend_block(ctx.trend, 'Tooling Type', ctx.keyns)
+
+    st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
+    ui.section("Tooling Type Detail")
+    st.caption("Select a row to open that tooling type.")
+    t = core.entity_detail_table(ctx.scope, 'Tooling Type', period_label=ctx.period_label,
+                                tolerance_pct=ctx.tolerance_pct)
+    if t.empty:
+        st.info("No tooling-type data for this scope.")
+        return
+    t = t[[c for c in core.V3_TYPE_COLS if c in t.columns]]
+    _table_drill(ui.search_box(t, f"type_{ctx.keyns}"), 'Tooling Type', 'type',
+                 f"type_{ctx.keyns}")
+
+
+def render_type(ctx):
+    """One selected tooling type: same page, scoped, drilling into its tools."""
+    ui.entity_badge("Tooling Type:", ctx.value)
+
+    ui.section("Summary")
+    ui.summary_tiles(core.scope_summary(ctx.scope, ctx.tolerance_pct), "Tools")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    pie_col, rank_col = st.columns([1, 2])
+    with pie_col:
+        ch.single_pie(ctx.scope, ctx.tolerance_pct, ctx.keyns,
+                      title=f"{ctx.value} — Fast / Within / Slow")
+    with rank_col:
+        ui.section("Saving Opportunity & Loss by Tool", size="1.1rem")
+        ch.ranking_bars(ctx.scope, ['Tooling'], ctx.tolerance_pct, ctx.keyns)
+
+    st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
+    ch.render_trend_block(ctx.trend, 'Tooling', ctx.keyns)
+
+    st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
+    ui.section("Tool Detail")
+    st.caption("Select a row to open that tool's report.")
+    tools = _tool_table(ctx.scope, ctx.period_label, ctx.tolerance_pct)
+    if tools.empty:
+        st.info("No tool data for this tooling type.")
+        return
+    _table_drill(ui.search_box(tools, f"tt_{ctx.keyns}"), 'Tooling ID', 'tool', f"tt_{ctx.keyns}")
+
+
+def render_part_all(ctx):
+    """Part C section 7 — Part overview. Tiles count PARTS, not tools."""
+    ui.section("Summary")
+    ui.summary_tiles(core.scope_summary(ctx.scope, ctx.tolerance_pct, entity_dim='Part'), "Parts")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    ui.section("Saving Opportunity & Loss by Part", size="1.1rem")
+    ch.ranking_bars(ctx.scope, ['Part'], ctx.tolerance_pct, ctx.keyns)
+
+    st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
+    ch.render_trend_block(ctx.trend, 'Part', ctx.keyns)
+
+    st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
+    ui.section("Part Detail")
+    st.caption("Select a row to open that part.")
+    p = core.entity_detail_table(ctx.scope, 'Part', extra_cols=('Part Name',),
+                                 period_label=ctx.period_label, tolerance_pct=ctx.tolerance_pct)
+    if p.empty:
+        st.info("No part data for this scope.")
+        return
+    p = p[[c for c in core.V3_PART_COLS if c in p.columns]]
+    _table_drill(ui.search_box(p, f"part_{ctx.keyns}"), 'Part', 'part', f"part_{ctx.keyns}")
+
+
+def render_part(ctx):
+    """One selected part's detail report."""
+    names = sorted(ctx.scope['Part Name'].dropna().unique().tolist())
+    ui.entity_badge("Part:", f"{ctx.value} — {', '.join(names)}" if names else str(ctx.value))
+
+    row = core.compute_comprehensive_row(ctx.value, ctx.scope, 'Part', ctx.period_label,
+                                         tolerance_pct=ctx.tolerance_pct)
+    n_tools = ctx.scope['Tooling'].nunique()
+
+    a, b, c, d = st.columns(4)
+    with a:
+        st.metric("Total Tools", f"{n_tools:,}")
+        if st.button("View tools →", key=f"parttools_{ctx.keyns}"):
+            _drill('part_tools', None)
+    _eff = row['CT Weighted Average Efficiency']
+    b.metric("Cycle Time Efficiency", f"{_eff:.1f}%" if pd.notna(_eff) else "N/A")
+    c.metric("Saving Opportunity", f"${row['Financial Gain']:,.0f}")
+    d.metric("Loss", f"${row['Financial Loss']:,.0f}")
+
+    e, f, g = st.columns(3)
+    e.metric("Fast Shots", f"{row['Fast Shots (%)']:.1f}%")
+    f.metric("Within Shots", f"{row['Within Shots (%)']:.1f}%")
+    g.metric("Slow Shots", f"{row['Slow Shots (%)']:.1f}%")
+
+    st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
+    ch.render_trend_block(ctx.trend, 'Tooling', ctx.keyns)
+
+
+def render_part_tools(ctx):
+    """Part C section 7.1 — the list of tools making the selected part."""
+    ui.section("Tools Making This Part")
+    st.caption("Select a row to open that tool's report.")
+    tools = _tool_table(ctx.scope, ctx.period_label, ctx.tolerance_pct)
+    if tools.empty:
+        st.info("No tools found for this part.")
+        return
+    _table_drill(ui.search_box(tools, f"pt_{ctx.keyns}"), 'Tooling ID', 'tool', f"pt_{ctx.keyns}")
+
+
+RENDERERS = {
+    'global': render_scope_overview,
+    'region': render_scope_overview,
+    'country': render_scope_overview,
+    'supplier': render_supplier,
+    'type_all': render_type_all,
+    'type': render_type,
+    'part_all': render_part_all,
+    'part': render_part,
+    'part_tools': render_part_tools,
+    'tool': render_tool,
+}
