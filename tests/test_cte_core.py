@@ -253,6 +253,22 @@ def test_entity_detail_table_efficiency_matches_calc_weighted_eff(priced):
         assert got == pytest.approx(expected, abs=1e-9)
 
 
+def test_tool_count_counts_distinct_toolings(priced):
+    assert core.tool_count(priced) == priced["Tooling"].nunique()
+
+
+def test_tool_count_empty_dataframe_returns_zero():
+    """tool_count should handle an empty DataFrame gracefully."""
+    empty_df = pd.DataFrame(columns=['Tooling'])
+    assert core.tool_count(empty_df) == 0
+
+
+def test_tool_count_no_tooling_column_returns_zero():
+    """tool_count should handle a frame with no Tooling column gracefully."""
+    df = pd.DataFrame({'Supplier': ['A', 'B']})
+    assert core.tool_count(df) == 0
+
+
 def test_v3_column_constants_exist():
     for const in ("V3_SUPPLIER_COLS", "V3_TOOL_COLS", "V3_TYPE_COLS", "V3_PART_COLS"):
         assert isinstance(getattr(core, const), list)

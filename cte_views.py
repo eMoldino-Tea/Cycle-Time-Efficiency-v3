@@ -309,12 +309,15 @@ def render_part_all(ctx):
 
 def render_part(ctx):
     """One selected part's detail report."""
+    if ctx.scope.empty:
+        st.info("No data available for this part.")
+        return
     names = sorted(ctx.scope['Part Name'].dropna().unique().tolist())
     ui.entity_badge("Part:", f"{ctx.value} — {', '.join(names)}" if names else str(ctx.value))
 
     row = core.compute_comprehensive_row(ctx.value, ctx.scope, 'Part', ctx.period_label,
                                          tolerance_pct=ctx.tolerance_pct)
-    n_tools = ctx.scope['Tooling'].nunique()
+    n_tools = core.tool_count(ctx.scope)
 
     a, b, c, d = st.columns(4)
     with a:

@@ -795,6 +795,13 @@ def ct_split_summary(df, freq='M'):
 # 6c. V3 SCOPE HELPERS  (assembly only -- every number comes from the
 #     existing functions above)
 # ==========================================================================
+def tool_count(df):
+    """Number of distinct toolings in `df`; 0 for an empty or column-less frame."""
+    if df.empty or 'Tooling' not in df.columns:
+        return 0
+    return int(df['Tooling'].nunique())
+
+
 def scope_summary(df, tolerance_pct=DEFAULT_TOLERANCE_PCT, entity_dim='Tooling'):
     """The six summary tiles shared by every v3 level.
 
@@ -852,7 +859,7 @@ def entity_detail_table(df, dim, extra_cols=(), period_label="",
         for c in extra_cols:
             if c in g.columns:
                 row[c] = ", ".join(sorted(str(v) for v in g[c].dropna().unique()))
-        row['Total Toolings'] = g['Tooling'].nunique()
+        row['Total Toolings'] = tool_count(g)
         rows.append(row)
     out = pd.DataFrame(rows)
     return out.sort_values('CT Weighted Average Efficiency').reset_index(drop=True)
