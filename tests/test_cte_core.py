@@ -358,10 +358,59 @@ def test_act_weighted_deviation_trend_tooling_dim_matches_single_tool_math(price
 
 
 def test_act_weighted_deviation_trend_supplier_dim_unchanged_behaviour(priced):
-    # Locks the pre-fix behaviour for a non-Tooling dimension so a future edit
-    # to the de-duplication logic can't silently change it.
+    # Characterization lock for a non-Tooling dimension: pins the ACTUAL
+    # per-bucket values (captured from the current implementation on the
+    # demo dataset), not just column names / monotonicity / non-nullness --
+    # those shape-only checks would pass even if the underlying math changed.
+    # A future edit to the de-duplication or entity-collapse logic that moves
+    # any of these numbers must fail this test.
     t = core.act_weighted_deviation_trend(priced, 'Supplier', 'M')
+    expected_buckets = pd.to_datetime([
+        '2025-07-01', '2025-08-01', '2025-09-01', '2025-10-01', '2025-11-01',
+        '2025-12-01', '2026-01-01', '2026-02-01', '2026-03-01', '2026-04-01',
+        '2026-05-01', '2026-06-01', '2026-07-01',
+    ])
+    expected_dev = [
+        0.16021080742219027, 0.13022076260590784, 0.17196178429692655,
+        0.23267628785405506, 0.10497381687775019, 0.2549661469948544,
+        0.27908960756969686, 0.24278277019200956, 0.2865493949448023,
+        0.23217729680842739, 0.21140399188597095, 0.1205731751905693,
+        0.5165112420256551,
+    ]
     assert not t.empty
     assert list(t.columns) == ['bucket', 'Weighted_Deviation']
     assert t['bucket'].is_monotonic_increasing
     assert t['Weighted_Deviation'].notna().all()
+    assert list(t['bucket']) == list(expected_buckets)
+    assert t['Weighted_Deviation'].tolist() == pytest.approx(expected_dev, abs=1e-9)
+
+
+def test_act_weighted_deviation_trend_tooling_dim_is_act_weighted_across_tools():
+    # Finding 1 regression test: the single-tool test above cannot detect a
+    # collapse to a plain unweighted mean, because with one tool the two
+    # methods coincide. This hand-built frame has TWO tools with very
+    # different ACTs in the same bucket, so ACT-weighted and plain-unweighted
+    # give clearly different answers -- a regression to plain averaging must
+    # fail this test.
+    #
+    # Tool A: ACT=10s (short cycle), ran 5s slower  -> deviation = +5s
+    # Tool B: ACT=1000s (long cycle), ran 50s faster -> deviation = -50s
+    # Total_Shots=3600 for both so Expected_Hours/Used_Hours divide out to
+    # whole numbers (3600s/hour), keeping the arithmetic exact.
+    df = pd.DataFrame([
+        dict(Date=pd.Timestamp("2026-01-10"), Tooling="A",
+             Expected_Hours=10.0, Used_Hours=15.0, Total_Shots=3600),
+        dict(Date=pd.Timestamp("2026-01-15"), Tooling="B",
+             Expected_Hours=1000.0, Used_Hours=950.0, Total_Shots=3600),
+    ])
+    t = core.act_weighted_deviation_trend(df, "Tooling", "M")
+    assert len(t) == 1
+
+    # Hand-computed by the documented Stage-2 formula: average the tools'
+    # deviations weighted by each tool's own ACT.
+    act_weighted = (10 * 5 + 1000 * (-50)) / (10 + 1000)   # -49.455445544554455
+    plain_mean = (5 + (-50)) / 2                            # -22.5
+
+    assert act_weighted != pytest.approx(plain_mean)  # sanity: methods diverge sharply
+    assert t["Weighted_Deviation"].iloc[0] == pytest.approx(act_weighted, abs=1e-9)
+    assert t["Weighted_Deviation"].iloc[0] != pytest.approx(plain_mean, abs=1e-6)

@@ -664,9 +664,20 @@ def act_weighted_deviation_trend(df, dim, freq='M'):
             return np.nan
         return np.average(g['Deviation_tool'], weights=w)
 
-    entity_g = (tool_g.groupby(['bucket', dim])
-                       .apply(_weighted_dev)
-                       .reset_index(name='Weighted_Deviation'))
+    if dim == 'Tooling':
+        # dim IS the tool: there is no separate entity level to collapse to
+        # first, so Stage 2 and Stage 3 are the same step -- go straight to
+        # an ACT-weighted average across tools per bucket. Grouping by
+        # ['bucket', dim] here would be grouping on a frame already unique on
+        # those keys (Stage 1 dedup), so every "entity" would be a single
+        # row and the weighting would silently vanish (Finding 1).
+        entity_g = (tool_g.groupby('bucket')
+                          .apply(_weighted_dev)
+                          .reset_index(name='Weighted_Deviation'))
+    else:
+        entity_g = (tool_g.groupby(['bucket', dim])
+                          .apply(_weighted_dev)
+                          .reset_index(name='Weighted_Deviation'))
 
     out = (entity_g.groupby('bucket')['Weighted_Deviation']
                     .mean()
@@ -762,12 +773,20 @@ def ct_split_shot_trend(df, freq='M'):
 def ct_split_summary(df, freq='M'):
     """Headline stat line above Trend Graph 2.
 
-    NOTE ON NAMING: `ct_compliance` here is Faster% + Within% -- the share of
-    shots produced at or better than the approved cycle time. It is a
+    NOTE ON NAMING: the dict key `ct_compliance` is an internal name only --
+    the UI label is "At or Better Than ACT" (renamed from "CT Compliance";
+    the old label collided with a different meaning in the backend spec).
+    Do not resurrect "CT Compliance" as the headline label.
+
+    The value is Faster% + Within% -- the share of shots produced at or
+    better than the approved cycle time. Since pct_within is defined as
+    `100 - pct_fast - pct_slow`, this is algebraically identical to
+    `100 - pct_slow`: it is NOT independent information from the Slower%
+    figure rendered alongside it, just its complement. It is also a
     DIFFERENT metric from the app's canonical Weighted CT Efficiency
     (calc_weighted_eff) and from the backend spec's own within-band-only
     `ct_compliance`. Always render it with the Graph 2 footnote so the three
-    are never confused.
+    meanings are never confused.
 
     Returns dict: pct_fast, pct_within, pct_slow, ct_compliance, total_shots,
     active_buckets. Percentages are 0.0 when there are no shots.

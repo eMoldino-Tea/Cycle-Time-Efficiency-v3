@@ -25,9 +25,9 @@ TREND2_FOOTNOTE = (
     "Faster / Within / Slower = share of shots produced faster than, within "
     "(±tolerance of), or slower than the Approved Cycle Time · shot-weighted "
     "across all tools with cycle-time data · bars show all recorded shots. "
-    "CT Compliance = Faster% + Within%; it is a different measure from the "
-    "Cycle Time Efficiency shown elsewhere, which is the shot-share weighted "
-    "average of the three category efficiencies."
+    "At or Better Than ACT = Faster% + Within%; it is a different measure "
+    "from the Cycle Time Efficiency shown elsewhere, which is the shot-share "
+    "weighted average of the three category efficiencies."
 )
 
 
@@ -47,8 +47,23 @@ def render_trend_block(trend_scope_df, trend_dim, keyns):
 # --------------------------------------------------------------------------
 # Trend Graph 1 -- ACT-Weighted Deviation (unchanged from Executive)
 # --------------------------------------------------------------------------
+def _pluralize_dim(dim):
+    """Pluralise a trend dimension name for the chart heading.
+
+    Every dimension act_weighted_deviation_trend is called with today
+    ('Supplier', 'Tooling Type', 'Part', 'Tooling') pluralises correctly with
+    a plain trailing 's' -- Suppliers, Tooling Types, Parts, Toolings.
+    """
+    return dim if dim.endswith('s') else dim + 's'
+
+
 def _render_deviation_graph(df, dim, freq, period_word, keyns):
-    ui.section("ACT-Weighted Deviation", size="1.1rem")
+    # Finding 2: disclose which dimension this figure averages across, since
+    # the same underlying data yields a different number at different levels
+    # (each level averages across its own child entity -- see trend_dim in
+    # cte_nav.LEVELS).
+    ui.section(f"ACT-Weighted Deviation (averaged across {_pluralize_dim(dim)})",
+               size="1.1rem")
     dev = core.act_weighted_deviation_trend(df, dim, freq)
     if dev.empty:
         st.info("Not enough dated data to plot a trend.")
@@ -118,7 +133,7 @@ def _render_split_graph(df, freq, period_word, keyns):
     bucket_word = "active months" if freq == 'M' else "active quarters"
     st.markdown(
         f'<div class="v3-statline">'
-        f'<b>CT Compliance {summ["ct_compliance"]:.0f}%</b> &nbsp;·&nbsp; '
+        f'<b>At or Better Than ACT {summ["ct_compliance"]:.0f}%</b> &nbsp;·&nbsp; '
         f'<span style="color:{ui.RED};">Faster {summ["pct_fast"]:.0f}%</span> &nbsp;·&nbsp; '
         f'<span style="color:{ui.GREEN};">Within {summ["pct_within"]:.0f}%</span> &nbsp;·&nbsp; '
         f'<span style="color:{ui.YELLOW};">Slower {summ["pct_slow"]:.0f}%</span> &nbsp;·&nbsp; '
