@@ -52,10 +52,15 @@ PART_NAMES = {
 PARTS = list(PART_NAMES.keys())
 PLANTS = ['Plant 1 (MX)', 'Plant 2 (US)', 'Plant 3 (DE)', 'Plant 4 (PL)',
           'Plant 5 (CN)', 'Plant 6 (VN)', 'Plant 7 (BR)']
-PLANT_TO_REGION = {
-    'Plant 1 (MX)': 'North America', 'Plant 2 (US)': 'North America',
-    'Plant 3 (DE)': 'Europe', 'Plant 4 (PL)': 'Europe',
-    'Plant 5 (CN)': 'APAC', 'Plant 6 (VN)': 'APAC', 'Plant 7 (BR)': 'LATAM',
+# Plant -> (Country, Region); mirrors cte_core.PLANT_META.
+PLANT_META = {
+    'Plant 1 (MX)': ('Mexico',        'North America'),
+    'Plant 2 (US)': ('United States', 'North America'),
+    'Plant 3 (DE)': ('Germany',       'Europe'),
+    'Plant 4 (PL)': ('Poland',        'Europe'),
+    'Plant 5 (CN)': ('China',         'APAC'),
+    'Plant 6 (VN)': ('Vietnam',       'APAC'),
+    'Plant 7 (BR)': ('Brazil',        'LATAM'),
 }
 OEM_DIVISIONS = ['NA Auto', 'EU Consumer', 'APAC Enterprise', 'LATAM Industrial']
 TOOLMAKERS = ['TM-A', 'TM-B', 'TM-C', 'TM-D']
@@ -89,6 +94,12 @@ def generate(num_tools=80, weeks=52, end_date=None, seed=None):
         ttype = rng.choice(TOOLING_TYPES)
         product = rng.choice(PRODUCTS)
         part = rng.choice(PARTS)
+        _r = rng.random()
+        _n_extra = 2 if _r < 0.08 else (1 if _r < 0.28 else 0)
+        tool_parts = [str(part)]
+        if _n_extra:
+            _pool = [p for p in PARTS if p != part]
+            tool_parts += [str(p) for p in rng.choice(_pool, size=_n_extra, replace=False)]
         plant = rng.choice(PLANTS)
         oem = rng.choice(OEM_DIVISIONS)
         toolmaker = rng.choice(TOOLMAKERS)
@@ -125,7 +136,9 @@ def generate(num_tools=80, weeks=52, end_date=None, seed=None):
                     'Base_Fin_Gain': gain * BASELINE_RATE,
                     'Base_Fin_Loss': loss * BASELINE_RATE,
                     'Supplier': sup, 'Tooling Type': ttype, 'Product': product,
-                    'Part': part, 'Tooling': tool_id, 'Date': date,
+                    'Part': (tool_parts[0] if len(tool_parts) == 1
+                             else str(rng.choice(tool_parts))),
+                    'Tooling': tool_id, 'Date': date,
                     'OEM Business Division': oem, 'Toolmaker': toolmaker,
                     'Plant': plant, 'Cavities': cavities,
                     'Total_Shots': shots, 'ACT': act, 'Actual_CT': actual_ct,
@@ -135,7 +148,8 @@ def generate(num_tools=80, weeks=52, end_date=None, seed=None):
     data['Efficiency_%'] = np.where(data['Used_Hours'] > 0,
                                      (data['Expected_Hours'] / data['Used_Hours']) * 100, 0)
     data['Part Name'] = data['Part'].map(PART_NAMES).fillna('Component')
-    data['Region'] = data['Plant'].map(PLANT_TO_REGION).fillna('Other')
+    data['Country'] = data['Plant'].map(lambda p: PLANT_META.get(p, ('Unknown', 'Other'))[0])
+    data['Region'] = data['Plant'].map(lambda p: PLANT_META.get(p, ('Unknown', 'Other'))[1])
     return data
 
 

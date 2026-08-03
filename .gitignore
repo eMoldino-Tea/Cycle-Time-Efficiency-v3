@@ -7,3 +7,9 @@ __pycache__/
 
 # Local browser-tool verification artifacts
 .playwright-mcp/
+
+# macOS
+.DS_Store
+
+# Subagent-driven-development scratch (briefs, reports, review packages)
+.superpowers/

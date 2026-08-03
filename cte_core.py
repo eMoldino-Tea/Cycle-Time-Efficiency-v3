@@ -38,6 +38,42 @@ BASELINE_RATE = 220.0
 
 
 # ==========================================================================
+# GEOGRAPHY (v3)
+# ==========================================================================
+# v3 treats Region AND Country as explicit data fields rather than parsing the
+# country code out of the Plant name. This dict is the placeholder data layer:
+# when the feature connects to the platform backend, both fields will arrive
+# derived from Plant + Supplier information and this mapping goes away.
+# Plant -> (Country, Region)
+PLANT_META = {
+    'Plant 1 (MX)': ('Mexico',        'North America'),
+    'Plant 2 (US)': ('United States', 'North America'),
+    'Plant 3 (DE)': ('Germany',       'Europe'),
+    'Plant 4 (PL)': ('Poland',        'Europe'),
+    'Plant 5 (CN)': ('China',         'APAC'),
+    'Plant 6 (VN)': ('Vietnam',       'APAC'),
+    'Plant 7 (BR)': ('Brazil',        'LATAM'),
+}
+UNKNOWN_GEO = ('Unknown', 'Other')
+
+
+def ensure_geo_columns(df):
+    """Guarantee explicit `Country` and `Region` columns on a record frame.
+
+    Existing columns are left untouched, so a backend feed (or a sample CSV)
+    that already carries real geography wins over this placeholder mapping.
+    """
+    out = df.copy()
+    if 'Plant' not in out.columns:
+        return out
+    if 'Country' not in out.columns:
+        out['Country'] = out['Plant'].map(lambda p: PLANT_META.get(p, UNKNOWN_GEO)[0])
+    if 'Region' not in out.columns:
+        out['Region'] = out['Plant'].map(lambda p: PLANT_META.get(p, UNKNOWN_GEO)[1])
+    return out
+
+
+# ==========================================================================
 # 1. DATA LOADING  (verbatim from original, unchanged)
 # ==========================================================================
 @st.cache_data
@@ -165,6 +201,14 @@ def load_base_data(version: int = 3):
     type_slow_bump = {'Thermoforming': 20.0}
     part_slow_bump = {'Part-017': 6.0, 'Part-022': 6.0}
 
+    # Multi-part tools (v3): real client data has tools that mould more than one
+    # part. Draws come from a DEDICATED generator so the global np.random
+    # sequence — and therefore every hour / shot / efficiency value below — is
+    # unchanged; only some Part *labels* differ. Scenario dynamics
+    # (part_slopes / part_dyn / part_slow_bump) stay keyed to the tool's
+    # PRIMARY part, which is what those scenarios were tuned against.
+    part_rng = np.random.default_rng(2026)
+
     records = []
     tool_counter = 1
     for sup, (start_lvl, slope) in suppliers.items():
@@ -176,6 +220,13 @@ def load_base_data(version: int = 3):
             ttype = np.random.choice(type_pools[t])
             product = np.random.choice(product_pools[t])
             part = np.random.choice(part_pools[t])
+            _r = part_rng.random()
+            _n_extra = 2 if _r < 0.08 else (1 if _r < 0.28 else 0)
+            tool_parts = [str(part)]
+            if _n_extra:
+                _pool = [p for p in part_pools[t] if p != part]
+                tool_parts += [str(p) for p in part_rng.choice(_pool, size=min(_n_extra, len(_pool)),
+                                                               replace=False)]
             plant = np.random.choice(plant_pools[t])
             oem = np.random.choice(oem_pool)
             toolmaker = np.random.choice(['TM-A', 'TM-B', 'TM-C', 'TM-D'])
@@ -235,7 +286,9 @@ def load_base_data(version: int = 3):
                         'Shots_Gained': sg, 'Shots_Lost': sl, 'Used_Hours': used,
                         'Expected_Hours': expected, 'Base_Fin_Gain': bfg, 'Base_Fin_Loss': bfl,
                         'Supplier': sup, 'Tooling Type': ttype, 'Product': product,
-                        'Part': part, 'Tooling': tool_id, 'Date': date,
+                        'Part': (tool_parts[0] if len(tool_parts) == 1
+                                 else str(part_rng.choice(tool_parts))),
+                        'Tooling': tool_id, 'Date': date,
                         'OEM Business Division': oem, 'Toolmaker': toolmaker,
                         'Plant': plant, 'Cavities': cavities, '_vol': volume,
                     })
@@ -265,17 +318,10 @@ def load_base_data(version: int = 3):
     }
     data['Part Name'] = data['Part'].map(part_names).fillna('Component')
 
-    # ---- DERIVED (display-only) Region -------------------------------------
-    # The source dataset has no native "Region" column. The executive spec asks
-    # for a Region filter, so we derive one from the Plant country code. This is
-    # a UI convenience only and touches no calculation. Swap this one mapping
-    # when the real dataset provides a native Region field.
-    plant_to_region = {
-        'Plant 1 (MX)': 'North America', 'Plant 2 (US)': 'North America',
-        'Plant 3 (DE)': 'Europe', 'Plant 4 (PL)': 'Europe',
-        'Plant 5 (CN)': 'APAC', 'Plant 6 (VN)': 'APAC', 'Plant 7 (BR)': 'LATAM',
-    }
-    data['Region'] = data['Plant'].map(plant_to_region).fillna('Other')
+    # ---- EXPLICIT geography (v3): Country + Region --------------------------
+    # See PLANT_META at the top of this module. Both fields are real columns,
+    # not string-parsed at point of use.
+    data = ensure_geo_columns(data)
 
     return data
 
@@ -599,7 +645,8 @@ def act_weighted_deviation_trend(df, dim, freq='M'):
     d = df.copy()
     d['bucket'] = d['Date'].dt.to_period(freq).dt.start_time
 
-    tool_g = (d.groupby(['bucket', dim, 'Tooling'])
+    group_keys = list(dict.fromkeys(['bucket', dim, 'Tooling']))
+    tool_g = (d.groupby(group_keys)
                 .agg(Expected_Hours=('Expected_Hours', 'sum'),
                      Used_Hours=('Used_Hours', 'sum'),
                      Total_Shots=('Total_Shots', 'sum'))
@@ -617,9 +664,20 @@ def act_weighted_deviation_trend(df, dim, freq='M'):
             return np.nan
         return np.average(g['Deviation_tool'], weights=w)
 
-    entity_g = (tool_g.groupby(['bucket', dim])
-                       .apply(_weighted_dev)
-                       .reset_index(name='Weighted_Deviation'))
+    if dim == 'Tooling':
+        # dim IS the tool: there is no separate entity level to collapse to
+        # first, so Stage 2 and Stage 3 are the same step -- go straight to
+        # an ACT-weighted average across tools per bucket. Grouping by
+        # ['bucket', dim] here would be grouping on a frame already unique on
+        # those keys (Stage 1 dedup), so every "entity" would be a single
+        # row and the weighting would silently vanish (Finding 1).
+        entity_g = (tool_g.groupby('bucket')
+                          .apply(_weighted_dev)
+                          .reset_index(name='Weighted_Deviation'))
+    else:
+        entity_g = (tool_g.groupby(['bucket', dim])
+                          .apply(_weighted_dev)
+                          .reset_index(name='Weighted_Deviation'))
 
     out = (entity_g.groupby('bucket')['Weighted_Deviation']
                     .mean()
@@ -627,6 +685,237 @@ def act_weighted_deviation_trend(df, dim, freq='M'):
                     .dropna(subset=['Weighted_Deviation'])
                     .sort_values('bucket'))
     return out
+
+
+# ==========================================================================
+# TIME RANGE PRESETS (v3)
+# ==========================================================================
+TIME_RANGE_PRESETS = [
+    "Last 7 Days", "Last 30 Days", "Last Quarter", "Last 12 Months", "Custom Range",
+]
+
+
+def resolve_time_range(preset, max_date):
+    """Resolve a v3 Time Range preset to a (start, end) timestamp pair.
+
+    "Last Quarter" is the previous COMPLETE calendar quarter relative to
+    max_date — the quarter currently in progress is excluded entirely.
+    Calendar quarters are Jan-Mar / Apr-Jun / Jul-Sep / Oct-Dec, matching the
+    app's existing quarter bucketing.
+    """
+    mx = pd.Timestamp(max_date)
+    if preset == "Last 7 Days":
+        return mx - pd.Timedelta(days=7), mx
+    if preset == "Last 30 Days":
+        return mx - pd.Timedelta(days=30), mx
+    if preset == "Last Quarter":
+        curr_q_start = mx.to_period('Q').start_time
+        prev_q = (curr_q_start - pd.Timedelta(days=1)).to_period('Q')
+        return prev_q.start_time, prev_q.end_time
+    if preset == "Last 12 Months":
+        return mx - pd.DateOffset(months=12), mx
+    raise ValueError(f"Unknown time-range preset: {preset!r}")
+
+
+# ==========================================================================
+# 6b. CT SPLIT & SHOT TREND  (v3 -- Trend Graph 2)
+# ==========================================================================
+# Shot-share Fast/Within/Slow per time bucket. Reuses the per-record
+# Shots_Gained / Shots_Lost / Total_Shots columns that apply_tolerance already
+# classifies at the active tolerance band -- this only regroups them by
+# month/quarter instead of by entity. Efficiency per bucket pools the bucket's
+# raw hours and calls calc_weighted_eff ONCE (never an average of tool scores).
+CT_SPLIT_COLS = [
+    'bucket', 'Total Shots', 'CT Efficiency %',
+    'Fast Shots (%)', 'Within Shots (%)', 'Slow Shots (%)',
+    'Saving Opportunity ($)', 'Loss ($)',
+]
+
+
+def ct_split_shot_trend(df, freq='M'):
+    """Per-bucket shot split + efficiency + financials for Trend Graph 2.
+
+    freq: 'M' (month) or 'Q' (calendar quarter), matching the app's existing
+    Month-to-Month / Quarter-to-Quarter toggle.
+
+    Returns a DataFrame with CT_SPLIT_COLS. Buckets with zero shots are
+    dropped so an idle month never renders a 0/0/0 split.
+    """
+    if df is None or df.empty or 'Date' not in df.columns:
+        return pd.DataFrame(columns=CT_SPLIT_COLS)
+    d = df.copy()
+    d['bucket'] = d['Date'].dt.to_period(freq).dt.start_time
+
+    rows = []
+    for bucket, g in d.groupby('bucket'):
+        tot = g['Total_Shots'].sum()
+        if tot <= 0:
+            continue
+        fast_pct = g['Shots_Gained'].sum() / tot * 100.0
+        slow_pct = g['Shots_Lost'].sum() / tot * 100.0
+        rows.append({
+            'bucket': bucket,
+            'Total Shots': int(tot),
+            'CT Efficiency %': calc_weighted_eff(g),
+            'Fast Shots (%)': fast_pct,
+            'Slow Shots (%)': slow_pct,
+            'Within Shots (%)': 100.0 - fast_pct - slow_pct,
+            'Saving Opportunity ($)': float(g['Financial_Gain'].sum()) if 'Financial_Gain' in g else 0.0,
+            'Loss ($)': float(g['Financial_Loss'].sum()) if 'Financial_Loss' in g else 0.0,
+        })
+    if not rows:
+        return pd.DataFrame(columns=CT_SPLIT_COLS)
+    return (pd.DataFrame(rows)[CT_SPLIT_COLS]
+              .sort_values('bucket')
+              .reset_index(drop=True))
+
+
+def ct_split_summary(df, freq='M'):
+    """Headline stat line above Trend Graph 2.
+
+    NOTE ON NAMING: the dict key `ct_compliance` is an internal name only --
+    the UI label is "At or Better Than ACT" (renamed from "CT Compliance";
+    the old label collided with a different meaning in the backend spec).
+    Do not resurrect "CT Compliance" as the headline label.
+
+    The value is Faster% + Within% -- the share of shots produced at or
+    better than the approved cycle time. Since pct_within is defined as
+    `100 - pct_fast - pct_slow`, this is algebraically identical to
+    `100 - pct_slow`: it is NOT independent information from the Slower%
+    figure rendered alongside it, just its complement. It is also a
+    DIFFERENT metric from the app's canonical Weighted CT Efficiency
+    (calc_weighted_eff) and from the backend spec's own within-band-only
+    `ct_compliance`. Always render it with the Graph 2 footnote so the three
+    meanings are never confused.
+
+    Returns dict: pct_fast, pct_within, pct_slow, ct_compliance, total_shots,
+    active_buckets. Percentages are 0.0 when there are no shots.
+    """
+    empty = {'pct_fast': 0.0, 'pct_within': 0.0, 'pct_slow': 0.0,
+             'ct_compliance': 0.0, 'total_shots': 0, 'active_buckets': 0}
+    if df is None or df.empty:
+        return empty
+    tot = df['Total_Shots'].sum()
+    if tot <= 0:
+        return empty
+    pct_fast = df['Shots_Gained'].sum() / tot * 100.0
+    pct_slow = df['Shots_Lost'].sum() / tot * 100.0
+    pct_within = 100.0 - pct_fast - pct_slow
+    return {
+        'pct_fast': float(pct_fast),
+        'pct_within': float(pct_within),
+        'pct_slow': float(pct_slow),
+        'ct_compliance': float(pct_fast + pct_within),
+        'total_shots': int(tot),
+        'active_buckets': int(len(ct_split_shot_trend(df, freq))),
+    }
+
+
+# ==========================================================================
+# 6c. V3 SCOPE HELPERS  (assembly only -- every number comes from the
+#     existing functions above)
+# ==========================================================================
+def tool_count(df):
+    """Number of distinct toolings in `df`; 0 for an empty or column-less frame."""
+    if df.empty or 'Tooling' not in df.columns:
+        return 0
+    return int(df['Tooling'].nunique())
+
+
+def scope_summary(df, tolerance_pct=DEFAULT_TOLERANCE_PCT, entity_dim='Tooling'):
+    """The six summary tiles shared by every v3 level.
+
+    Counts are per-entity classifications from fast_within_slow_summary
+    (default entity = Tooling; pass entity_dim='Part' for the Part Overview).
+    Dollars are pooled record sums, so they are independent of the entity
+    classification and never double-count.
+    """
+    s = fast_within_slow_summary(df, entity_dim, tolerance_pct)
+    gain = float(df['Financial_Gain'].sum()) if not df.empty and 'Financial_Gain' in df else 0.0
+    loss = float(df['Financial_Loss'].sum()) if not df.empty and 'Financial_Loss' in df else 0.0
+    s['saving_opportunity'] = gain
+    s['loss'] = loss
+    s['net'] = gain - loss
+    return s
+
+
+def ranking_by_financial(df, col, metric='Financial Gained',
+                         top_n=None, tolerance_pct=DEFAULT_TOLERANCE_PCT):
+    """Ranking list ordered by dollars rather than efficiency.
+
+    Thin wrapper over generate_ranking_table_data (whose math is unchanged);
+    it only re-sorts and re-numbers. metric is 'Financial Gained' (saving
+    opportunity) or 'Financial Lost'.
+    """
+    if df.empty:
+        return pd.DataFrame()
+    agg = generate_ranking_table_data(df, col, tolerance_pct)
+    if agg.empty or metric not in agg.columns:
+        return agg
+    out = agg.sort_values(metric, ascending=False)
+    if top_n:
+        out = out.head(top_n)
+    out = out.reset_index(drop=True)
+    out['Rank'] = range(1, len(out) + 1)
+    return out
+
+
+def entity_detail_table(df, dim, extra_cols=(), period_label="",
+                        tolerance_pct=DEFAULT_TOLERANCE_PCT):
+    """One comprehensive row per entity in `dim`, plus descriptive columns.
+
+    Each row is compute_comprehensive_row (unchanged math) for that entity's
+    pooled slice. `extra_cols` are descriptive dimensions (Country, Region,
+    Plant, ...) collapsed to the distinct values present for that entity and
+    comma-joined -- so a supplier operating in two countries shows both,
+    rather than silently dropping one.
+    """
+    if df.empty:
+        return pd.DataFrame()
+    rows = []
+    for name, g in df.groupby(dim):
+        row = compute_comprehensive_row(name, g, dim, period_label,
+                                        tolerance_pct=tolerance_pct)
+        for c in extra_cols:
+            if c in g.columns:
+                row[c] = ", ".join(sorted(str(v) for v in g[c].dropna().unique()))
+        row['Total Toolings'] = tool_count(g)
+        rows.append(row)
+    out = pd.DataFrame(rows)
+    return out.sort_values('CT Weighted Average Efficiency').reset_index(drop=True)
+
+
+# ---- v3 display column sets (see cte_ui.V3_DISPLAY_RENAME for the labels) --
+V3_SUPPLIER_COLS = [
+    'Supplier', 'Country', 'Total Toolings', 'Total Shots',
+    'CT Weighted Average Efficiency', 'Financial Gain', 'Financial Loss',
+    'Fast Shots (%)', 'Within Shots (%)', 'Slow Shots (%)',
+]
+V3_TOOL_COLS = [
+    'Tooling ID', 'Region', 'Country', 'Plant', 'ACT', 'Actual Average CT (WACT)',
+    'CT Weighted Average Efficiency', 'Fast Shots (%)', 'Within Shots (%)',
+    'Slow Shots (%)', 'Financial Gain', 'Financial Loss', 'Net Financial',
+]
+V3_TYPE_COLS = [
+    'Tooling Type', 'Total Toolings', 'Total Shots',
+    'CT Weighted Average Efficiency', 'Fast Shots (%)', 'Within Shots (%)',
+    'Slow Shots (%)', 'Financial Gain', 'Financial Loss',
+]
+V3_PART_COLS = [
+    'Part', 'Part Name', 'Total Toolings', 'Total Shots',
+    'CT Weighted Average Efficiency', 'Fast Shots (%)', 'Within Shots (%)',
+    'Slow Shots (%)', 'Financial Gain', 'Financial Loss',
+]
+# Finding 1: the geography detail table rendered for a scope-overview level's
+# child dimension (Region under Global, Country under Region) when that child
+# isn't Supplier. The entity column itself ('Region' or 'Country') is
+# prepended by the caller, since entity_detail_table's `dim` varies per level
+# -- everything here is the same shape as V3_TYPE_COLS otherwise.
+V3_GEO_COLS = [
+    'Total Toolings', 'Total Shots',
+    'CT Weighted Average Efficiency', 'Fast Shots (%)', 'Within Shots (%)',
+    'Slow Shots (%)', 'Financial Gain', 'Financial Loss',
+]
 
 
 # ==========================================================================
