@@ -199,9 +199,12 @@ def render_tool(ctx):
     if len(parts) == 1:
         st.markdown(f'**Part:** {parts[0]} ({part_names.get(parts[0], "")})')
     else:
-        with st.expander(f"Parts ({len(parts)})", expanded=False):
-            for p in parts:
-                st.markdown(f"- **{p}** — {part_names.get(p, '')}")
+        part_options = [f"{p} ({part_names.get(p, '')})" for p in parts]
+        st.selectbox(
+            f"Parts ({len(parts)})",
+            options=part_options,
+            key=f"part_select_{ctx.keyns}"
+        )
 
     e, f, g, h = st.columns(4)
     e.metric("Approved Cycle Time (ACT)", f"{row['ACT']:.2f}s")
