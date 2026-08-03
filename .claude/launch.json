@@ -3,16 +3,9 @@
   "configurations": [
     {
       "name": "cte-dashboard",
-      "runtimeExecutable": "/bin/sh",
-      "runtimeArgs": ["-c", "cd '/Users/thyle/Desktop/Cycle Time Efficiency v3' && exec python3 -m streamlit run Cycle-Time-Efficiency-v3.py --server.headless true"],
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "streamlit", "run", "Cycle-Time-Efficiency-v3.py", "--server.headless", "true"],
       "port": 8501,
-      "autoPort": true
-    },
-    {
-      "name": "cte-v3",
-      "runtimeExecutable": "/bin/sh",
-      "runtimeArgs": ["-c", "cd '/Users/thyle/Desktop/Cycle Time Efficiency v3' && exec python3 -m streamlit run Cycle-Time-Efficiency-v3.py --server.headless true"],
-      "port": 8502,
       "autoPort": true
     }
   ]
