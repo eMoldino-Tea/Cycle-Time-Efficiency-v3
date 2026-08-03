@@ -645,7 +645,8 @@ def act_weighted_deviation_trend(df, dim, freq='M'):
     d = df.copy()
     d['bucket'] = d['Date'].dt.to_period(freq).dt.start_time
 
-    tool_g = (d.groupby(['bucket', dim, 'Tooling'])
+    group_keys = list(dict.fromkeys(['bucket', dim, 'Tooling']))
+    tool_g = (d.groupby(group_keys)
                 .agg(Expected_Hours=('Expected_Hours', 'sum'),
                      Used_Hours=('Used_Hours', 'sum'),
                      Total_Shots=('Total_Shots', 'sum'))

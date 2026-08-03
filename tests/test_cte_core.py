@@ -312,3 +312,56 @@ def test_entity_detail_table_empty_dataframe_returns_empty():
     result = core.entity_detail_table(empty_df, 'Supplier')
     assert result.empty
     assert isinstance(result, pd.DataFrame)
+
+
+def test_act_weighted_deviation_trend_tooling_dim_monthly_does_not_raise(priced):
+    # Regression: dim == 'Tooling' used to make the internal groupby key list
+    # ['bucket', 'Tooling', 'Tooling'], and reset_index() raised
+    # ValueError: cannot insert Tooling, already exists.
+    t = core.act_weighted_deviation_trend(priced, 'Tooling', 'M')
+    assert not t.empty
+    assert list(t.columns) == ['bucket', 'Weighted_Deviation']
+
+
+def test_act_weighted_deviation_trend_tooling_dim_quarterly_does_not_raise(priced):
+    t = core.act_weighted_deviation_trend(priced, 'Tooling', 'Q')
+    assert not t.empty
+    assert list(t.columns) == ['bucket', 'Weighted_Deviation']
+
+
+def test_act_weighted_deviation_trend_tooling_dim_matches_single_tool_math(priced):
+    # For a frame filtered down to a single tool, the dimension IS the tool,
+    # so the returned per-bucket deviation must equal that tool's own
+    # Actual_CT - ACT computed from the pooled bucket hours.
+    one_tool = priced["Tooling"].iloc[0]
+    d = priced[priced["Tooling"] == one_tool]
+    t = core.act_weighted_deviation_trend(d, 'Tooling', 'M')
+    assert not t.empty
+
+    d2 = d.copy()
+    d2["bucket"] = d2["Date"].dt.to_period("M").dt.start_time
+    pooled = (d2.groupby("bucket")
+                .agg(Expected_Hours=("Expected_Hours", "sum"),
+                     Used_Hours=("Used_Hours", "sum"),
+                     Total_Shots=("Total_Shots", "sum"))
+                .reset_index())
+    pooled = pooled[pooled["Total_Shots"] > 0]
+    pooled["ACT"] = pooled["Expected_Hours"] * 3600 / pooled["Total_Shots"]
+    pooled["ActualCT"] = pooled["Used_Hours"] * 3600 / pooled["Total_Shots"]
+    pooled["Expected_Deviation"] = pooled["ActualCT"] - pooled["ACT"]
+
+    merged = t.merge(pooled[["bucket", "Expected_Deviation"]], on="bucket")
+    assert len(merged) == len(t)
+    assert merged["Weighted_Deviation"].values == pytest.approx(
+        merged["Expected_Deviation"].values, abs=1e-9
+    )
+
+
+def test_act_weighted_deviation_trend_supplier_dim_unchanged_behaviour(priced):
+    # Locks the pre-fix behaviour for a non-Tooling dimension so a future edit
+    # to the de-duplication logic can't silently change it.
+    t = core.act_weighted_deviation_trend(priced, 'Supplier', 'M')
+    assert not t.empty
+    assert list(t.columns) == ['bucket', 'Weighted_Deviation']
+    assert t['bucket'].is_monotonic_increasing
+    assert t['Weighted_Deviation'].notna().all()
