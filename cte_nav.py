@@ -28,6 +28,16 @@ import streamlit as st
 #              through Country average across Suppliers, while Supplier / Type
 #              / Part / Tool average across Toolings.
 # entity_noun: what the six summary tiles are counting at this level
+# exclusive  : (optional, default False) when True, this level's own filter
+#              SUPERSEDES every ancestor frame's filter rather than adding to
+#              it -- see scope_df(). Only 'tool' sets this: a tool belongs to
+#              exactly one supplier, plant, region, country and tooling type,
+#              so dropping those ancestor filters can never change a tool's
+#              data, but Part is a cross-cutting dimension (Part C section
+#              7.1) that a tool can share with sibling tools, and the product
+#              owner ruled the tool report must always show whole-tool
+#              figures regardless of which part (if any) was used to
+#              navigate there.
 LEVELS = {
     'global':     {'label': 'Global',       'col': None,           'child': 'region',
                    'trend_dim': 'Supplier',     'entity_noun': 'Tools'},
@@ -48,7 +58,7 @@ LEVELS = {
     'part_tools': {'label': 'Tools',        'col': None,           'child': 'tool',
                    'trend_dim': 'Tooling',      'entity_noun': 'Tools'},
     'tool':       {'label': 'Tool',         'col': 'Tooling',      'child': None,
-                   'trend_dim': 'Tooling',      'entity_noun': 'Tools'},
+                   'trend_dim': 'Tooling',      'entity_noun': 'Tools', 'exclusive': True},
 }
 
 # Root tabs, in display order: (tab label, root level key)
@@ -68,7 +78,22 @@ def scope_df(df, stack):
 
     Frames whose level has no filter column (roots, part_tools) are skipped,
     as are frames naming a column the frame doesn't have.
+
+    Exclusive levels are the one deviation from "apply every frame in order":
+    if the CURRENT (last) frame's level is marked exclusive=True in LEVELS,
+    every ancestor frame is ignored and only the last frame's own filter is
+    applied. This keeps a tool report identical regardless of whether it was
+    reached via Supplier or via the cross-cutting Part path -- see LEVELS'
+    'exclusive' comment for the full reasoning.
     """
+    if stack:
+        last_level, last_value = stack[-1]
+        if LEVELS[last_level].get('exclusive'):
+            col = LEVELS[last_level]['col']
+            if col is None or last_value is None or col not in df.columns:
+                return df
+            return df[df[col] == last_value]
+
     out = df
     for level, value in stack:
         col = LEVELS[level]['col']

@@ -8,11 +8,28 @@ breadcrumb, section headings).
 No business math lives here. Anything numeric comes from cte_core.
 """
 
+import html
+
 import pandas as pd
 import streamlit as st
 
 GREEN, YELLOW, RED, GREY = "#5cb85c", "#eab308", "#d9534f", "#94a3b8"
 STATUS_COLORS = {"Within": GREEN, "Slow": YELLOW, "Fast": RED}
+
+
+def esc(value):
+    """Escape a value before it is interpolated into an
+    st.markdown(..., unsafe_allow_html=True) string.
+
+    Finding 3: several presentation helpers interpolate caller-supplied text
+    (supplier / tool / part / tooling-type names, master-filter selections)
+    into raw HTML. In production those names can come from an
+    operator-supplied CSV, so anything that isn't OUR OWN static markup
+    string must be escaped here rather than trusted. Safe (and a no-op in
+    practice) on values that are already plain numbers or text with no HTML
+    metacharacters.
+    """
+    return html.escape(str(value))
 
 
 def inject_theme():
@@ -267,21 +284,26 @@ def bucket_label(bucket_ts, freq):
 
 
 def section(title, size="1.4rem"):
-    st.markdown(f'<div class="section-title" style="font-size:{size};">{title}</div>',
+    # `size` is always one of our own static CSS-length literals passed by
+    # call sites in this codebase, not caller/CSV data -- only `title` (which
+    # can be built from a dynamic dimension name) needs escaping.
+    st.markdown(f'<div class="section-title" style="font-size:{size};">{esc(title)}</div>',
                 unsafe_allow_html=True)
 
 
 def entity_badge(prefix, label):
+    # `label` is a real entity value (supplier / tool / part / tooling-type
+    # name) that can originate from an operator-supplied CSV -- escape it.
     st.markdown(f"""<div style="display:flex;align-items:center;gap:12px;margin-bottom:1.25rem;">
-  <span style="font-size:1.3rem;font-weight:700;color:#fff;">{prefix}</span>
-  <span class="entity-badge">{label}</span>
+  <span style="font-size:1.3rem;font-weight:700;color:#fff;">{esc(prefix)}</span>
+  <span class="entity-badge">{esc(label)}</span>
 </div>""", unsafe_allow_html=True)
 
 
 def _tile(label, value, color, sub=""):
-    sub_html = f'<div class="v3-tile-sub">{sub}</div>' if sub else ""
-    return (f'<div class="v3-tile"><div class="v3-tile-label">{label}</div>'
-            f'<div class="v3-tile-num" style="color:{color};">{value}</div>{sub_html}</div>')
+    sub_html = f'<div class="v3-tile-sub">{esc(sub)}</div>' if sub else ""
+    return (f'<div class="v3-tile"><div class="v3-tile-label">{esc(label)}</div>'
+            f'<div class="v3-tile-num" style="color:{color};">{esc(value)}</div>{sub_html}</div>')
 
 
 def summary_tiles(summary, entity_noun="Tools"):

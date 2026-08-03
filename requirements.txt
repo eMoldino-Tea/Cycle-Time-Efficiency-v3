@@ -1,4 +1,13 @@
-streamlit>=1.30.0
-pandas>=2.1.0
+# Upper-bounded at <1.51: 1.51+ removes the deprecated use_container_width
+# parameter outright (removal date 2025-12-31 has passed); every chart/table
+# call site has been migrated to `width=`, but pin until that migration is
+# re-verified against a newer Streamlit release.
+streamlit>=1.50,<1.51
+# Upper-bounded at <3: pandas 3 makes groupby.apply's include_groups=False
+# behavior the default, which breaks generate_ranking_table_data's _agg_func
+# (it reads the grouping column via x['Tooling'].nunique()). That function is
+# frozen math and the fix needs its own restructuring effort, not a silent
+# version bump.
+pandas>=2.3,<3
 numpy>=1.26.0
 plotly>=5.18.0

@@ -90,7 +90,7 @@ def _render_deviation_graph(df, dim, freq, period_word, keyns):
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         font=dict(color="#e2e8f0"),
     )
-    st.plotly_chart(fig, use_container_width=True, key=f"tr1_{keyns}")
+    st.plotly_chart(fig, width="stretch", key=f"tr1_{keyns}")
 
     t = dev.reset_index(drop=True)
     t['prev_dev'] = t['Weighted_Deviation'].shift(1)
@@ -110,7 +110,7 @@ def _render_deviation_graph(df, dim, freq, period_word, keyns):
     disp.columns = [period_word, dev_col, 'Change vs Previous Period']
     sty = (disp.style.format({dev_col: '{:.2f}'})
                     .map(ui.trend_change_css, subset=['Change vs Previous Period']))
-    st.dataframe(sty, use_container_width=True, hide_index=True, column_config={
+    st.dataframe(sty, width="stretch", hide_index=True, column_config={
         dev_col: st.column_config.NumberColumn(
             help="Average seconds per shot vs the approved cycle time (ACT-weighted). "
                  "Negative = running faster than approved; positive = slower."),
@@ -179,12 +179,12 @@ def _render_split_graph(df, freq, period_word, keyns):
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         font=dict(color="#e2e8f0"),
     )
-    st.plotly_chart(fig, use_container_width=True, key=f"tr2_{keyns}")
+    st.plotly_chart(fig, width="stretch", key=f"tr2_{keyns}")
     st.markdown(f'<div class="v3-footnote">{TREND2_FOOTNOTE}</div>', unsafe_allow_html=True)
 
     disp = s[['label'] + [c for c in core.CT_SPLIT_COLS if c != 'bucket']].copy()
     disp = disp.rename(columns={'label': period_word})
-    st.dataframe(ui.style_table(disp, ui.TREND2_FMT), use_container_width=True, hide_index=True)
+    st.dataframe(ui.style_table(disp, ui.TREND2_FMT), width="stretch", hide_index=True)
 
 
 # --------------------------------------------------------------------------
@@ -220,11 +220,13 @@ def small_multiple_pies(df, dim, tolerance_pct, keyns, max_pies=8):
         with col:
             sub = df[df[dim] == ent]
             s = core.fast_within_slow_summary(sub, 'Tooling', tolerance_pct)
+            # `ent` is a real entity value (region / country / supplier
+            # name, ...) that can originate from an operator-supplied CSV.
             st.markdown(f'<div style="text-align:center;color:#e2e8f0;font-size:.92rem;'
-                        f'font-weight:600;margin-bottom:2px;">{ent}</div>',
+                        f'font-weight:600;margin-bottom:2px;">{ui.esc(ent)}</div>',
                         unsafe_allow_html=True)
             st.plotly_chart(_pie_figure([s['fast'], s['within'], s['slow']]),
-                            use_container_width=True, key=f"pie_{keyns}_{dim}_{ent}")
+                            width="stretch", key=f"pie_{keyns}_{dim}_{ent}")
             st.markdown(f'<div style="text-align:center;color:#64748b;font-size:.78rem;">'
                         f'{s["total"]} tools</div>', unsafe_allow_html=True)
     if len(entities) > max_pies:
@@ -237,10 +239,12 @@ def single_pie(df, tolerance_pct, keyns, title="Cycle Time Efficiency Split"):
     if s['total'] == 0:
         st.info("No data available for this metric.")
         return
+    # `title` frequently embeds the caller's ctx.value (e.g. a supplier or
+    # tooling-type name) -- escape it; the default literal escapes to itself.
     st.markdown(f'<div style="text-align:center;color:#e2e8f0;font-size:1.05rem;'
-                f'font-weight:600;margin-bottom:4px;">{title}</div>', unsafe_allow_html=True)
+                f'font-weight:600;margin-bottom:4px;">{ui.esc(title)}</div>', unsafe_allow_html=True)
     st.plotly_chart(_pie_figure([s['fast'], s['within'], s['slow']], height=320),
-                    use_container_width=True, key=f"pie1_{keyns}")
+                    width="stretch", key=f"pie1_{keyns}")
 
 
 # --------------------------------------------------------------------------
@@ -271,7 +275,7 @@ def ranking_bars(df, dims, tolerance_pct, keyns, top_n=10):
     ]:
         with col:
             st.markdown(f'<div style="color:#e2e8f0;font-size:1rem;font-weight:600;'
-                        f'margin-bottom:4px;">{title}</div>', unsafe_allow_html=True)
+                        f'margin-bottom:4px;">{ui.esc(title)}</div>', unsafe_allow_html=True)
             d = data.sort_values(metric)
             fig = go.Figure(go.Bar(
                 x=d[metric], y=d[pick].astype(str), orientation='h',
@@ -287,4 +291,4 @@ def ranking_bars(df, dims, tolerance_pct, keyns, top_n=10):
                 yaxis=dict(type='category', showgrid=False, tickfont=dict(color="#e2e8f0")),
                 font=dict(color="#e2e8f0"), showlegend=False,
             )
-            st.plotly_chart(fig, use_container_width=True, key=f"rank_{keyns}_{metric}")
+            st.plotly_chart(fig, width="stretch", key=f"rank_{keyns}_{metric}")

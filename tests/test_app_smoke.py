@@ -90,7 +90,7 @@ def test_both_trend_graphs_appear_at_every_level():
 def test_trend_graph_2_stat_line_and_footnote():
     at = run_at(STACKS["global"])
     text = all_text(at)
-    assert "CT Compliance" in text
+    assert "At or Better Than ACT" in text
     assert "active months" in text
     # the footnote that keeps CT Compliance distinct from CT Efficiency
     assert "different measure from the Cycle Time Efficiency" in text

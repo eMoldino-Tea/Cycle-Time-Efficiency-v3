@@ -56,7 +56,7 @@ def _table_drill(df, label_col, level, keyns):
     """
     event = st.dataframe(
         ui.style_table(ui.v3_display(df), ui.DETAIL_FMT),
-        use_container_width=True, hide_index=True,
+        width="stretch", hide_index=True,
         on_select="rerun", selection_mode="single-row",
         key=f"tbl_{keyns}_{nav.nav_epoch()}", column_config=ui.neg_help(df))
     if event and event.selection and event.selection.rows:
@@ -90,6 +90,36 @@ def render_scope_overview(ctx):
     # --- B. Trend ---
     st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
     ch.render_trend_block(ctx.trend, cfg['trend_dim'], ctx.keyns)
+
+    # --- Finding 1: child geography detail table -----------------------------
+    # Global's child is Region and Region's child is Country -- neither was
+    # ever reachable before, since the only clickable table on this shared
+    # page was Supplier Detail below. Country's own child already IS
+    # Supplier, so it just keeps that one table (no separate geography table
+    # would add anything). Own widget-key prefix (keyed off the child level,
+    # e.g. "region_"/"country_") so it can never collide with "sup_" below.
+    if child_dim != 'Supplier':
+        child_level = cfg['child']
+        child_label = nav.LEVELS[child_level]['label']
+        st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
+        ui.section(f"{child_label} Detail")
+        st.caption(f"Select a row to open that {child_label.lower()}.")
+        geo = core.entity_detail_table(ctx.scope, child_dim,
+                                       period_label=ctx.period_label,
+                                       tolerance_pct=ctx.tolerance_pct)
+        if geo.empty:
+            st.info(f"No {child_label.lower()} data for this scope.")
+        else:
+            geo_cols = [child_dim] + [c for c in core.V3_GEO_COLS if c in geo.columns]
+            geo = geo[[c for c in geo_cols if c in geo.columns]]
+            gtop = st.columns([3, 1])
+            with gtop[0]:
+                gview = ui.search_box(geo, f"{child_level}_{ctx.keyns}")
+            with gtop[1]:
+                st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
+                ui.download_csv(ui.v3_display(gview), "Export CSV",
+                                f"{child_dim.lower()}s.csv", f"{child_level}_{ctx.keyns}")
+            _table_drill(gview, child_dim, child_level, f"{child_level}_{ctx.keyns}")
 
     # --- Supplier detail table (click a supplier to drill in) ---
     st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
@@ -339,9 +369,18 @@ def render_part(ctx):
 
 
 def render_part_tools(ctx):
-    """Part C section 7.1 — the list of tools making the selected part."""
+    """Part C section 7.1 — the list of tools making the selected part.
+
+    Deliberately exempt from Finding 2's exclusive-tool fix: this table is a
+    breakdown OF the selected part, so its figures stay part-scoped even
+    though the tool report you drill into from here shows whole-tool figures
+    (scope_df drops the Part ancestor filter once you're actually on the
+    'tool' level, since that level is marked exclusive).
+    """
     ui.section("Tools Making This Part")
     st.caption("Select a row to open that tool's report.")
+    st.caption("Figures below are scoped to this part only — a tool's own "
+               "report (after you click through) shows that tool's whole-tool figures.")
     tools = _tool_table(ctx.scope, ctx.period_label, ctx.tolerance_pct)
     if tools.empty:
         st.info("No tools found for this part.")

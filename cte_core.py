@@ -906,6 +906,16 @@ V3_PART_COLS = [
     'CT Weighted Average Efficiency', 'Fast Shots (%)', 'Within Shots (%)',
     'Slow Shots (%)', 'Financial Gain', 'Financial Loss',
 ]
+# Finding 1: the geography detail table rendered for a scope-overview level's
+# child dimension (Region under Global, Country under Region) when that child
+# isn't Supplier. The entity column itself ('Region' or 'Country') is
+# prepended by the caller, since entity_detail_table's `dim` varies per level
+# -- everything here is the same shape as V3_TYPE_COLS otherwise.
+V3_GEO_COLS = [
+    'Total Toolings', 'Total Shots',
+    'CT Weighted Average Efficiency', 'Fast Shots (%)', 'Within Shots (%)',
+    'Slow Shots (%)', 'Financial Gain', 'Financial Loss',
+]
 
 
 # ==========================================================================

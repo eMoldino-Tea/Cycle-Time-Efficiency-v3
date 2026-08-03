@@ -137,10 +137,15 @@ st.markdown(
 )
 
 _active = {k: v for k, v in master_selections.items() if v}
+# Finding 3: `v` is the operator's selected values for a master-filter
+# dimension (Supplier, Tooling, Part, Tooling Type, ...) -- real entity names
+# that can originate from an operator-supplied CSV -- so each one is escaped
+# before landing in this unsafe_allow_html markdown block. `k` is always one
+# of our own static MASTER_FILTER_COLS literals, not data, so it is left as-is.
 _chip_html = "".join(
     f'<span style="background:#1e293b;border:1px solid #38bdf8;border-radius:6px;'
     f'padding:3px 12px;font-size:.85rem;color:#e2e8f0;white-space:nowrap;">'
-    f'<b>{k}:</b> {", ".join(v)}</span> ' for k, v in _active.items())
+    f'<b>{k}:</b> {", ".join(ui.esc(item) for item in v)}</span> ' for k, v in _active.items())
 # Built outside the f-string below: Python 3.9 forbids backslashes (and here,
 # nested quote escaping) inside f-string expressions.
 _no_filters = '<span style="color:#475569;font-size:.85rem;">None applied</span>'
