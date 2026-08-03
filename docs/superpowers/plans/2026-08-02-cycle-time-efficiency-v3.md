@@ -2493,10 +2493,13 @@ git commit -m "fix: issues found during v3 end-to-end verification"
 ## Reuse Ledger (what the plan promised to keep)
 
 **Reused verbatim from `cte_core.py` — no signature or formula change:**
-`calc_weighted_eff`, `apply_tolerance`, `apply_financials`, `performance_status_from_eff`, `compute_comprehensive_row`, `generate_ranking_table_data`, `entity_efficiency`, `fast_within_slow_summary`, `act_weighted_deviation_trend` (Trend Graph 1 at every level), `format_hm`, `detail_col_config`, `common_ranking_col_config`, `COMPREHENSIVE_TOOLING_COLS`, `REPORT_CARD_TOOLING_COLS`.
+`calc_weighted_eff`, `apply_tolerance`, `apply_financials`, `performance_status_from_eff`, `compute_comprehensive_row`, `generate_ranking_table_data`, `entity_efficiency`, `fast_within_slow_summary`, `format_hm`, `detail_col_config`, `common_ranking_col_config`, `COMPREHENSIVE_TOOLING_COLS`, `REPORT_CARD_TOOLING_COLS`.
 
 **Reused via a new group-by caller (math untouched, grouping is new):**
-`act_weighted_deviation_trend` is called with a per-level `trend_dim` (Supplier for Global/Region/Country; Tooling Type for the type overview; Part for the part overview; Tooling for supplier/type/part/tool pages). `generate_ranking_table_data` is called through `ranking_by_financial`, which only re-sorts. `compute_comprehensive_row` is called through `entity_detail_table` for Supplier, Tooling, Tooling Type and Part.
+`generate_ranking_table_data` is called through `ranking_by_financial`, which only re-sorts. `compute_comprehensive_row` is called through `entity_detail_table` for Supplier, Tooling, Tooling Type and Part.
+
+**Changed after this plan was written, not reused verbatim:**
+`act_weighted_deviation_trend` is called with a per-level `trend_dim` (Supplier for Global/Region/Country; Tooling Type for the type overview; Part for the part overview; Tooling for supplier/type/part/tool pages) — this is the one function this ledger originally (incorrectly) listed as verbatim. It was changed twice after v3 started calling it with `dim='Tooling'`, a dimension the original Executive dashboard never passed it: (1) a crash fix that de-duplicated its internal group-by key list for `dim == 'Tooling'` (`['bucket', dim, 'Tooling']` collapsed a repeated column name that made `reset_index()` raise), and (2) a follow-up fix that restored genuine ACT-weighting for that same dimension, which the de-duplication had silently collapsed to a plain unweighted mean across tools. Both changes are scoped to the `dim == 'Tooling'` branch; the three dimensions the original app did use — `Supplier`, `Tooling Type`, `Part` — were verified byte-identical afterward (see `tests/test_cte_core.py`'s Supplier characterization pin).
 
 **Genuinely new in `cte_core.py`:**
 `PLANT_META`, `ensure_geo_columns`, `TIME_RANGE_PRESETS`, `resolve_time_range`, `ct_split_shot_trend`, `ct_split_summary`, `scope_summary`, `ranking_by_financial`, `entity_detail_table`, the four `V3_*_COLS` constants, and the multi-part branch in `load_base_data`.

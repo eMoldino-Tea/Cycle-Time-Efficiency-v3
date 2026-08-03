@@ -385,6 +385,67 @@ def test_act_weighted_deviation_trend_supplier_dim_unchanged_behaviour(priced):
     assert t['Weighted_Deviation'].tolist() == pytest.approx(expected_dev, abs=1e-9)
 
 
+def test_act_weighted_deviation_trend_tooling_dim_supplier_slice_unchanged_behaviour(priced):
+    """Characterization lock for the 'Tooling' dimension path -- the one that
+    was actually broken (Finding 1: it silently lost its ACT weighting,
+    collapsing to a plain unweighted mean across tools, because grouping by
+    ['bucket', dim] with dim == 'Tooling' groups on a frame already unique on
+    those keys, i.e. each "entity" is a single row and the weighting vanishes).
+
+    Pins the ACTUAL per-bucket values captured from the current (fixed,
+    genuinely ACT-weighted) implementation, on a fixed slice of the demo
+    data (Foxconn's rows, so the tool count -- and therefore the list of
+    pinned values -- stays small and stable). These values ARE ACT-weighted:
+    the companion assertion below confirms the plain unweighted mean of the
+    very same slice differs from them well outside this test's tolerance, so
+    a regression back to a plain unweighted mean must fail this test.
+    """
+    sup = priced[priced["Supplier"] == "Foxconn"]
+    assert sup["Tooling"].nunique() == 4  # keeps this pin small; catches a demo-data drift too
+
+    t = core.act_weighted_deviation_trend(sup, "Tooling", "M")
+    expected_buckets = pd.to_datetime([
+        "2025-07-01", "2025-08-01", "2025-09-01", "2025-10-01", "2025-11-01",
+        "2025-12-01", "2026-01-01", "2026-02-01", "2026-03-01", "2026-04-01",
+        "2026-05-01", "2026-06-01", "2026-07-01",
+    ])
+    expected_dev = [
+        -1.310274281031032, -0.7018839647195753, -0.6888074917212035,
+        -0.4348998400273377, -0.5572088821590626, -0.44024153386431597,
+        -0.42191563012893957, -0.4414108775941328, -0.16363549165424696,
+        -0.17436491614358007, -0.03926203434446131, -0.02727675470659796,
+        0.0,
+    ]
+    assert not t.empty
+    assert list(t.columns) == ["bucket", "Weighted_Deviation"]
+    assert list(t["bucket"]) == list(expected_buckets)
+    assert t["Weighted_Deviation"].tolist() == pytest.approx(expected_dev, abs=1e-9)
+
+    # Sanity check the claim above: compute the plain unweighted mean (average
+    # each bucket's per-tool deviations with equal weight, no ACT weighting)
+    # over the identical slice, and confirm it diverges from the pinned
+    # ACT-weighted values -- so this test really would catch a regression to
+    # plain averaging, not just a column-shape check.
+    d = sup.copy()
+    d["bucket"] = d["Date"].dt.to_period("M").dt.start_time
+    tool_g = (d.groupby(["bucket", "Tooling"])
+                .agg(Expected_Hours=("Expected_Hours", "sum"),
+                     Used_Hours=("Used_Hours", "sum"),
+                     Total_Shots=("Total_Shots", "sum"))
+                .reset_index())
+    tool_g = tool_g[tool_g["Total_Shots"] > 0]
+    tool_g["ACT_tool"] = tool_g["Expected_Hours"] * 3600 / tool_g["Total_Shots"]
+    tool_g["ActualCT_tool"] = tool_g["Used_Hours"] * 3600 / tool_g["Total_Shots"]
+    tool_g["Deviation_tool"] = tool_g["ActualCT_tool"] - tool_g["ACT_tool"]
+    plain_mean = (tool_g.groupby("bucket")["Deviation_tool"].mean()
+                        .reindex(expected_buckets).tolist())
+
+    assert plain_mean != pytest.approx(expected_dev, abs=1e-6), (
+        "plain unweighted mean must differ from the pinned ACT-weighted values, "
+        "otherwise this pin cannot distinguish the two methods"
+    )
+
+
 def test_act_weighted_deviation_trend_tooling_dim_is_act_weighted_across_tools():
     # Finding 1 regression test: the single-tool test above cannot detect a
     # collapse to a plain unweighted mean, because with one tool the two

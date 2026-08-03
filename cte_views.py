@@ -111,14 +111,15 @@ def render_scope_overview(ctx):
             st.info(f"No {child_label.lower()} data for this scope.")
         else:
             geo_cols = [child_dim] + [c for c in core.V3_GEO_COLS if c in geo.columns]
-            geo = geo[[c for c in geo_cols if c in geo.columns]]
+            geo = geo[geo_cols]
             gtop = st.columns([3, 1])
             with gtop[0]:
                 gview = ui.search_box(geo, f"{child_level}_{ctx.keyns}")
             with gtop[1]:
                 st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
                 ui.download_csv(ui.v3_display(gview), "Export CSV",
-                                f"{child_dim.lower()}s.csv", f"{child_level}_{ctx.keyns}")
+                                f"{ch.DIM_PLURAL[child_dim].lower()}.csv",
+                                f"{child_level}_{ctx.keyns}")
             _table_drill(gview, child_dim, child_level, f"{child_level}_{ctx.keyns}")
 
     # --- Supplier detail table (click a supplier to drill in) ---

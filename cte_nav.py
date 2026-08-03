@@ -85,14 +85,22 @@ def scope_df(df, stack):
     applied. This keeps a tool report identical regardless of whether it was
     reached via Supplier or via the cross-cutting Part path -- see LEVELS'
     'exclusive' comment for the full reasoning.
+
+    If the exclusive level's own filter can't actually be applied (its column
+    is missing from the frame, or its value is None), there is nothing to
+    supersede the ancestor filters with -- falling back to returning the
+    whole, unfiltered frame would silently show MORE data than was asked for
+    (the wrong direction of failure). Instead, fall through to the normal
+    ancestor loop below, same as a non-exclusive level would.
     """
     if stack:
         last_level, last_value = stack[-1]
         if LEVELS[last_level].get('exclusive'):
             col = LEVELS[last_level]['col']
-            if col is None or last_value is None or col not in df.columns:
-                return df
-            return df[df[col] == last_value]
+            if col is not None and last_value is not None and col in df.columns:
+                return df[df[col] == last_value]
+            # Fall through to the normal ancestor loop below instead of
+            # returning the whole frame.
 
     out = df
     for level, value in stack:

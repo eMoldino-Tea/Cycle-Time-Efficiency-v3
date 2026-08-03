@@ -47,14 +47,32 @@ def render_trend_block(trend_scope_df, trend_dim, keyns):
 # --------------------------------------------------------------------------
 # Trend Graph 1 -- ACT-Weighted Deviation (unchanged from Executive)
 # --------------------------------------------------------------------------
+DIM_PLURAL = {
+    'Supplier': 'Suppliers',
+    'Tooling': 'Tools',
+    'Tooling Type': 'Tooling Types',
+    'Part': 'Parts',
+    # Not among trend_dim's current values (Global/Region/Country's own
+    # trend_dim is 'Supplier'), but kept ready for future use.
+    'Region': 'Regions',
+    'Country': 'Countries',
+}
+
+
 def _pluralize_dim(dim):
     """Pluralise a trend dimension name for the chart heading.
 
-    Every dimension act_weighted_deviation_trend is called with today
-    ('Supplier', 'Tooling Type', 'Part', 'Tooling') pluralises correctly with
-    a plain trailing 's' -- Suppliers, Tooling Types, Parts, Toolings.
+    A naive trailing-'s' pluraliser is wrong on two counts: it mangles a
+    dimension ending in 'y' (e.g. 'Country' -> 'Countrys'), and for 'Tooling'
+    it produces 'Toolings' while the rest of the app -- V3_DISPLAY_RENAME's
+    'Total Toolings' -> 'Total Tools', the summary tiles, every table header
+    -- says 'Tools'. An explicit mapping avoids both, and an unknown
+    dimension fails loudly rather than silently producing a wrong word.
     """
-    return dim if dim.endswith('s') else dim + 's'
+    try:
+        return DIM_PLURAL[dim]
+    except KeyError:
+        raise ValueError(f"_pluralize_dim: no plural mapping for dimension {dim!r}")
 
 
 def _render_deviation_graph(df, dim, freq, period_word, keyns):

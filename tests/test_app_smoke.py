@@ -120,6 +120,31 @@ def test_part_overview_counts_parts_not_tools():
     assert "FAST PARTS (GAIN)" in text
 
 
+def test_each_scope_level_offers_its_child_drill_table():
+    """Behavioural companion to test_cte_nav.py's static source-text scanner.
+
+    That scanner reads cte_views.py's source text and would stay green even
+    if someone tightened render_scope_overview's gating condition (e.g.
+    `if child_dim != 'Supplier':` -> `if False:`) -- the parser still sees
+    the syntactic `_table_drill(...)` call in the function body, so a
+    regression that silently makes Region/Country's drill table stop
+    rendering would slip through undetected. This test instead runs the
+    real app (via AppTest) and checks for the actual heading text the
+    renderer emits, so it fails if the table itself stops appearing.
+
+    Global's child is Region and Region's child is Country, each rendering
+    a "<Child> Detail" heading (see render_scope_overview's Finding 1
+    block). Country's child is Supplier, which is already covered by the
+    page's own always-present "Supplier Detail" table, so no separate
+    geography table is rendered for it -- this loop still asserts "Supplier
+    Detail" is there for the "country" case, keeping the assertion uniform.
+    """
+    for lvl in ("global", "region", "country"):
+        child = nav.LEVELS[nav.LEVELS[lvl]["child"]]["label"]
+        t = all_text(run_at(STACKS[lvl]))
+        assert f"{child} Detail" in t, f"{lvl} has no drill table for {child}"
+
+
 def test_supplier_table_comma_joins_a_multi_country_supplier():
     at = run_at(STACKS["global"])
     sup = at.dataframe[-1].value  # Supplier Detail is the last table on the page

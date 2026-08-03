@@ -293,6 +293,35 @@ def test_scope_df_non_exclusive_levels_still_apply_every_ancestor_frame(frame):
     assert out_mismatch.empty
 
 
+def test_scope_df_exclusive_level_with_missing_column_falls_through_to_ancestors():
+    """If the exclusive ('tool') level's own filter column isn't present in
+    the frame, there is nothing to supersede the ancestor filters with --
+    the pre-fix code returned the WHOLE frame in that case (3 of 3 rows
+    below), discarding the Supplier ancestor filter entirely and silently
+    widening scope instead of narrowing it. The fix falls through to the
+    normal ancestor loop, so Supplier="A" still applies and only the two
+    rows belonging to Supplier A come back."""
+    frame = pd.DataFrame({
+        "Supplier": ["A", "A", "B"],
+        "Part": ["P1", "P2", "P1"],
+    })
+    stack = [("global", None), ("supplier", "A"), ("tool", "T1")]
+    out = nav.scope_df(frame, stack)
+    assert sorted(out.index.tolist()) == [0, 1]
+
+
+def test_scope_df_exclusive_level_with_none_value_falls_through_to_ancestors():
+    """Same fallback, triggered by the exclusive frame's value being None
+    instead of its column being missing."""
+    frame = pd.DataFrame({
+        "Supplier": ["A", "A", "B"],
+        "Tooling": ["T1", "T2", "T1"],
+    })
+    stack = [("global", None), ("supplier", "A"), ("tool", None)]
+    out = nav.scope_df(frame, stack)
+    assert sorted(out.index.tolist()) == [0, 1]
+
+
 def test_crumb_labels_uses_values_after_the_root():
     stack = [("global", None), ("region", "APAC"), ("supplier", "Foxconn")]
     assert nav.crumb_labels(stack) == [(0, "Global"), (1, "APAC"), (2, "Foxconn")]
