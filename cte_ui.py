@@ -371,8 +371,14 @@ def render_breadcrumb(frames, on_click):
     frames: list of (index, display_label) — the last one is the current page
     and is rendered inert. on_click(index) is called when an earlier crumb is
     clicked; the caller is responsible for popping the stack and rerunning.
+
+    A single frame means the reader is sitting at a bare root page (e.g. just
+    "Country"), which only ever repeats the label the root tab bar already
+    shows immediately above it -- render nothing rather than that redundant
+    one-crumb line. The breadcrumb earns its place once there's an actual
+    path to show, i.e. two or more frames.
     """
-    if not frames:
+    if len(frames) < 2:
         return
     with st.container(key="breadcrumb"):
         cols = st.columns([1] * len(frames) + [max(1, 8 - len(frames))])

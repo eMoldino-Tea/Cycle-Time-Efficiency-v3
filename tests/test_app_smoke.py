@@ -175,6 +175,29 @@ def test_no_level_renders_a_warning_box(level):
     assert not warnings, f"{level} rendered {len(warnings)} warning box(es): {warnings[:2]}"
 
 
+def _crumb_buttons(at):
+    return [b for b in at.button if b.key and b.key.startswith("crumb_")]
+
+
+@pytest.mark.parametrize("level", ["global", "region_all", "country_all",
+                                   "supplier_all", "plant_all", "type_all", "part_all"])
+def test_a_bare_root_page_shows_no_breadcrumb(level):
+    """A single-frame stack only ever repeats the root tab bar's own label
+    (e.g. "Country" sitting directly under the already-selected Country tab)
+    -- it must render nothing rather than that redundant one-crumb line, on
+    every root tab, not just the one this was first noticed on."""
+    at = run_at(STACKS[level])
+    assert _crumb_buttons(at) == [], f"{level} unexpectedly shows a breadcrumb"
+
+
+def test_a_drilled_in_page_still_shows_its_breadcrumb():
+    """The breadcrumb earns its place once there's an actual path to show --
+    this must not regress into hiding it everywhere."""
+    at = run_at(STACKS["tool"])  # global -> supplier(Foxconn) -> tool(TL-001)
+    labels = [b.label for b in _crumb_buttons(at)]
+    assert labels == ["Global  ›", "Foxconn  ›", "TL-001"]
+
+
 def test_supplier_table_comma_joins_a_multi_country_supplier():
     at = run_at(STACKS["global"])
     sup = at.dataframe[-1].value  # Supplier Detail is the last table on the page
