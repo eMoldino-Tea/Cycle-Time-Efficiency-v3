@@ -93,6 +93,7 @@ ROOTS = [
 
 _STACK_KEY = 'v3_nav_stack'
 _EPOCH_KEY = 'v3_nav_epoch'
+_SCROLL_KEY = 'v3_scroll_pending'
 
 
 # ---- pure helpers (no Streamlit) -----------------------------------------
@@ -163,19 +164,36 @@ def nav_epoch():
     return st.session_state.get(_EPOCH_KEY, 0)
 
 
-def _bump_epoch():
+def _mark_navigated():
+    """Record that the stack just changed.
+
+    Bumps the epoch (see nav_epoch) and raises a one-shot scroll request, so
+    the next render can put the user at the top of the page they navigated to
+    instead of leaving them wherever they were scrolled to. Every stack
+    mutation funnels through here, so no navigation path can forget either.
+    """
     st.session_state[_EPOCH_KEY] = st.session_state.get(_EPOCH_KEY, 0) + 1
+    st.session_state[_SCROLL_KEY] = True
+
+
+def consume_scroll_request():
+    """True at most once per navigation: has the page just changed?
+
+    One-shot by design -- it clears on read, so an ordinary rerun (moving a
+    slider, typing in a search box) does not yank the user back to the top.
+    """
+    return bool(st.session_state.pop(_SCROLL_KEY, False))
 
 
 def set_root(level):
     """Switch root tab: discard the stack and start fresh at `level`."""
     st.session_state[_STACK_KEY] = [(level, None)]
-    _bump_epoch()
+    _mark_navigated()
 
 
 def push(level, value):
     get_stack().append((level, value))
-    _bump_epoch()
+    _mark_navigated()
 
 
 def pop_to(index):
@@ -187,7 +205,7 @@ def pop_to(index):
     if not frames:
         frames = stack[:1]
     st.session_state[_STACK_KEY] = frames
-    _bump_epoch()
+    _mark_navigated()
 
 
 def current():

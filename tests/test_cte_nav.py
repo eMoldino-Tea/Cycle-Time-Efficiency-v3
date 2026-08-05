@@ -148,6 +148,32 @@ def _pushed_levels_in_views_source():
     return pushed
 
 
+def test_navigating_requests_a_scroll_to_top(session_state):
+    for mutate in (lambda: nav.push("region", "APAC"),
+                   lambda: nav.pop_to(0),
+                   lambda: nav.set_root("plant_all")):
+        nav.consume_scroll_request()          # clear any prior request
+        mutate()
+        assert nav.consume_scroll_request() is True, mutate
+
+
+def test_the_scroll_request_is_one_shot(session_state):
+    """An ordinary rerun must not yank the reader back to the top.
+
+    Only a stack change may request a scroll; moving the tolerance slider or
+    typing in a table's search box reruns the script without navigating, and
+    those must leave the scroll position alone.
+    """
+    nav.push("region", "APAC")
+    assert nav.consume_scroll_request() is True
+    assert nav.consume_scroll_request() is False
+    assert nav.consume_scroll_request() is False
+
+
+def test_no_scroll_is_requested_before_any_navigation(session_state):
+    assert nav.consume_scroll_request() is False
+
+
 def test_root_tabs_are_the_seven_requested_dimensions():
     """The root tab bar's labels and order are a product requirement."""
     assert [label for label, _ in nav.ROOTS] == [

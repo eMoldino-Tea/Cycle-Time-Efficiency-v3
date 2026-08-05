@@ -12,6 +12,7 @@ import html
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 GREEN, YELLOW, RED, GREY = "#5cb85c", "#eab308", "#d9534f", "#94a3b8"
 STATUS_COLORS = {"Within": GREEN, "Slow": YELLOW, "Fast": RED}
@@ -30,6 +31,37 @@ def esc(value):
     metacharacters.
     """
     return html.escape(str(value))
+
+
+def scroll_to_top(nonce=0):
+    """Put the viewport back at the top of the page.
+
+    Drill tables sit at the bottom of a long page, so without this a click
+    that opens a detail view leaves the reader stranded halfway down the new
+    page, looking at whatever happens to occupy their old scroll offset.
+
+    Streamlit 1.50 has no scroll API, and a <script> inside st.markdown is
+    stripped, so this goes through a zero-height component iframe and reaches
+    into the parent document. The scroll target is Streamlit's main section,
+    which is the element that actually scrolls -- the window itself does not
+    (document.body.scrollHeight is 0), so scrolling `window` is a no-op here.
+
+    `nonce` must change per navigation (pass nav.nav_epoch()): Streamlit
+    reuses a component iframe whose HTML is byte-identical, and a reused
+    iframe does not re-execute its script, so two navigations in a row would
+    scroll only the first time.
+    """
+    components.html(
+        f"""<script>
+        // nonce: {nonce}
+        const doc = window.parent.document;
+        const el = doc.querySelector('section[data-testid="stMain"]')
+                || doc.querySelector('[data-testid="stAppViewContainer"]')
+                || doc.scrollingElement;
+        if (el) {{ el.scrollTop = 0; }}
+        </script>""",
+        height=0,
+    )
 
 
 def inject_theme():

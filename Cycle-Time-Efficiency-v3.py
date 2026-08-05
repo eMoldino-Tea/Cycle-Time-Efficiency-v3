@@ -188,6 +188,11 @@ def _crumb_click(index):
 
 ui.render_breadcrumb(nav.crumb_labels(nav.get_stack()), _crumb_click)
 
+# Land the reader at the top of a page they just navigated to. One-shot, so
+# ordinary reruns (tolerance slider, table search) leave their scroll alone.
+if nav.consume_scroll_request():
+    ui.scroll_to_top(nav.nav_epoch())
+
 # ==========================================================================
 # DISPATCH
 # ==========================================================================
