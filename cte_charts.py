@@ -21,6 +21,8 @@ import streamlit as st
 import cte_core as core
 import cte_ui as ui
 
+HOVERLABEL_LEFT = dict(align="left")
+
 TREND2_FOOTNOTE = (
     "Faster / Within / Slower = share of shots produced faster than, within "
     "(±tolerance of), or slower than the Approved Cycle Time · shot-weighted "
@@ -106,6 +108,7 @@ def _render_deviation_graph(df, dim, freq, period_word, keyns):
                    title="ACT-Weighted Deviation (seconds)", tickfont=dict(color="#94a3b8")),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         font=dict(color="#e2e8f0"),
+        hoverlabel=HOVERLABEL_LEFT,
     )
     st.plotly_chart(fig, use_container_width=True, key=f"tr1_{keyns}")
 
@@ -195,6 +198,7 @@ def _render_split_graph(df, freq, period_word, keyns):
                     tickfont=dict(color="#94a3b8")),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         font=dict(color="#e2e8f0"),
+        hoverlabel=HOVERLABEL_LEFT,
     )
     st.plotly_chart(fig, use_container_width=True, key=f"tr2_{keyns}")
     st.markdown(f'<div class="v3-footnote">{TREND2_FOOTNOTE}</div>', unsafe_allow_html=True)
@@ -226,7 +230,7 @@ def _pie_figure(values, height=250):
     ))
     fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                       height=height, margin=dict(l=6, r=6, t=6, b=6), showlegend=False,
-                      font=dict(color="#e2e8f0"))
+                      font=dict(color="#e2e8f0"), hoverlabel=HOVERLABEL_LEFT)
     return fig
 
 
@@ -315,5 +319,6 @@ def ranking_bars(df, dims, tolerance_pct, keyns, top_n=10):
                            title="US$"),
                 yaxis=dict(type='category', showgrid=False, tickfont=dict(color="#e2e8f0")),
                 font=dict(color="#e2e8f0"), showlegend=False,
+                hoverlabel=HOVERLABEL_LEFT,
             )
             st.plotly_chart(fig, use_container_width=True, key=f"rank_{keyns}_{metric}")
