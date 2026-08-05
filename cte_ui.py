@@ -182,14 +182,26 @@ header {background-color:transparent !important;}
 
 /* v3 six-tile summary strip */
 .v3-tile {background:#1a1d26;border:1px solid #2d3748;border-radius:14px;
-  padding:18px 20px;height:100%;}
-.v3-tile-label {font-size:.85rem;color:#94a3b8;
+  padding:18px 20px;height:100%;box-sizing:border-box;
+  display:flex;flex-direction:column;}
+/* min-height on the label and sub rows reserves enough room for TWO lines
+   of each at all times, regardless of which is actually rendered -- the six
+   tiles' label lengths vary a lot ("Loss" vs "Within Tools (Neutral)") and
+   so do their sub-lines ("32.1%" vs "from fast shots" vs Total's none at
+   all), so at a narrow tile width some wrap and some don't. Reserving fixed
+   space rather than trying to make Streamlit's row stretch every tile to
+   match keeps this fix entirely inside this component's own CSS. */
+.v3-tile-label {font-size:.85rem;color:#94a3b8;line-height:1.3;min-height:2.3rem;
   letter-spacing:.1px;font-weight:700;margin-bottom:8px;}
 /* nowrap + clamp: a dollar figure must never break mid-number ($27,3 / 93),
    so it stays on one line and scales down instead when the tile is narrow. */
 .v3-tile-num {font-size:clamp(1.15rem, 2.1vw, 1.9rem);font-weight:800;
   line-height:1.1;white-space:nowrap;}
-.v3-tile-sub {font-size:.82rem;color:#64748b;margin-top:4px;}
+.v3-tile-sub {font-size:.82rem;color:#64748b;line-height:1.3;min-height:2.2rem;margin-top:4px;}
+
+/* "N tools" caption under each small-multiple pie */
+.v3-pie-count {text-align:center; color:#cbd5e1; font-size:1rem; font-weight:700;
+  margin-top:8px;}
 
 /* v3 stat line above Trend Graph 2 */
 .v3-statline {background:#151822;border:1px solid #2d3748;border-radius:10px;
@@ -337,9 +349,19 @@ def entity_badge(prefix, label):
 
 
 def _tile(label, value, color, sub=""):
-    sub_html = f'<div class="v3-tile-sub">{esc(sub)}</div>' if sub else ""
+    # The sub-line div is always rendered, even when `sub` is empty (the
+    # Total tile has none) -- CSS reserves fixed vertical space for it via
+    # min-height, so an absent sub-line doesn't make that one tile shorter
+    # than its five siblings. Reserving space this way, rather than trying
+    # to make Streamlit's row stretch the tile to match, is what actually
+    # works: an earlier attempt at the latter forced every stElementContainer
+    # in the whole app to flex-grow, which produced 500-700px tiles instead
+    # of fixing anything -- Streamlit's internal DOM is not a stable target
+    # for cross-tile height coordination, so this fix lives entirely in this
+    # component's own CSS and doesn't touch Streamlit's containers at all.
     return (f'<div class="v3-tile"><div class="v3-tile-label">{esc(label)}</div>'
-            f'<div class="v3-tile-num" style="color:{color};">{esc(value)}</div>{sub_html}</div>')
+            f'<div class="v3-tile-num" style="color:{color};">{esc(value)}</div>'
+            f'<div class="v3-tile-sub">{esc(sub)}</div></div>')
 
 
 def summary_tiles(summary, entity_noun="Tools"):
@@ -351,7 +373,6 @@ def summary_tiles(summary, entity_noun="Tools"):
     def _pct(p):
         return f"{p:.1f}%" if p is not None else "—"
 
-    c = st.columns(6, gap="small")
     tiles = [
         ("Total " + entity_noun, f"{summary['total']:,}", "#ffffff", ""),
         (f"Fast {entity_noun} (Gain)", f"{summary['fast']:,}", RED, _pct(summary['pct_fast'])),
@@ -360,6 +381,7 @@ def summary_tiles(summary, entity_noun="Tools"):
         ("Saving Opportunity", f"${summary['saving_opportunity']:,.0f}", GREEN, "from fast shots"),
         ("Loss", f"${summary['loss']:,.0f}", YELLOW, "from slow shots"),
     ]
+    c = st.columns(6, gap="small")
     for col, (label, value, color, sub) in zip(c, tiles):
         with col:
             st.markdown(_tile(label, value, color, sub), unsafe_allow_html=True)

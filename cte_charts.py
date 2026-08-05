@@ -256,8 +256,8 @@ def small_multiple_pies(df, dim, tolerance_pct, keyns, max_pies=8):
                         unsafe_allow_html=True)
             st.plotly_chart(_pie_figure([s['fast'], s['within'], s['slow']]),
                             use_container_width=True, key=f"pie_{keyns}_{dim}_{ent}")
-            st.markdown(f'<div style="text-align:center;color:#64748b;font-size:.78rem;">'
-                        f'{s["total"]} tools</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="v3-pie-count">{s["total"]} tools</div>',
+                        unsafe_allow_html=True)
     if len(entities) > max_pies:
         st.caption(f"Showing {max_pies} of {len(entities)} {dim.lower()}s — "
                    f"use the Master Filter to narrow further.")
