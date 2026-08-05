@@ -151,9 +151,12 @@ header {background-color:transparent !important;}
 /* v3 six-tile summary strip */
 .v3-tile {background:#1a1d26;border:1px solid #2d3748;border-radius:14px;
   padding:18px 20px;height:100%;}
-.v3-tile-label {font-size:.8rem;color:#94a3b8;text-transform:uppercase;
-  letter-spacing:.5px;font-weight:700;margin-bottom:8px;}
-.v3-tile-num {font-size:1.9rem;font-weight:800;line-height:1.1;}
+.v3-tile-label {font-size:.85rem;color:#94a3b8;
+  letter-spacing:.1px;font-weight:700;margin-bottom:8px;}
+/* nowrap + clamp: a dollar figure must never break mid-number ($27,3 / 93),
+   so it stays on one line and scales down instead when the tile is narrow. */
+.v3-tile-num {font-size:clamp(1.15rem, 2.1vw, 1.9rem);font-weight:800;
+  line-height:1.1;white-space:nowrap;}
 .v3-tile-sub {font-size:.82rem;color:#64748b;margin-top:4px;}
 
 /* v3 stat line above Trend Graph 2 */
