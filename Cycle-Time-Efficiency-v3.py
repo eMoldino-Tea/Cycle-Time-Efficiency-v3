@@ -80,6 +80,40 @@ st.sidebar.markdown("### Financial Parameters")
 labor_rate = st.sidebar.number_input("Labor Rate ($/hour)", min_value=0.0, value=40.0, step=1.0)
 machine_rate = st.sidebar.number_input("Machine Rate ($/hour)", min_value=0.0, value=180.0, step=1.0)
 
+# ==========================================================================
+# HIGH-RUNNER TOOL FILTER
+# ==========================================================================
+# Restricts the whole dashboard to tools whose average daily parts output
+# reaches a configured threshold. Its evaluation period is deliberately
+# separate from the Time Range above: "is this a high-volume tool" is a
+# property of the tool, so you may well want to judge it over 12 months
+# while looking at last week's cycle-time performance.
+st.sidebar.markdown("---")
+st.sidebar.markdown("### High-Runner Tool Filter")
+hr_min_avg = st.sidebar.number_input(
+    "Min. average parts produced per day",
+    min_value=core.HIGH_RUNNER_MIN_AVG_PARTS,
+    value=core.HIGH_RUNNER_MIN_AVG_PARTS,
+    step=50,
+    help="A tool counts as a high runner when its parts produced per day, "
+         "averaged over the evaluation period below, reaches this number. "
+         "Parts Produced = shots × mold cavities.",
+)
+hr_period = st.sidebar.radio("Evaluation period", core.TIME_RANGE_PRESETS,
+                             index=1, key="hr_period")
+if hr_period == "Custom Range":
+    _hc1, _hc2 = st.sidebar.columns(2)
+    _hr_s = _hc1.date_input("Start", min_date.date(), max_value=max_date.date(),
+                            key="hr_custom_start")
+    _hr_e = _hc2.date_input("End", max_date.date(), max_value=max_date.date(),
+                            key="hr_custom_end")
+    hr_start = pd.to_datetime(_hr_s)
+    hr_end = pd.to_datetime(_hr_e) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+else:
+    hr_start, hr_end = core.resolve_time_range(hr_period, max_date)
+hr_display = st.sidebar.radio("Display", core.HIGH_RUNNER_DISPLAY_OPTIONS,
+                              index=1, key="hr_display")
+
 
 def date_slice(df, s, e):
     return df[(df['Date'] >= s) & (df['Date'] <= e)].copy()
@@ -119,6 +153,16 @@ def apply_master_filters(df):
 current_df = apply_master_filters(current_raw)
 # Full history for both trend graphs -- deliberately ignores the Time Range.
 trend_all_df = apply_master_filters(core.apply_financials(base_df, labor_rate, machine_rate))
+
+# High-Runner filter, applied to both frames so the entire feature set --
+# tiles, pies, rankings, tables AND both trend graphs -- covers only the
+# qualifying tools. Evaluated against the unfiltered base_df so a tool's
+# high-runner status is a fact about the tool, not about the Time Range or
+# the Master Filter selections currently narrowing the view.
+if hr_display == "High-Runner Tools Only":
+    _hr_tools = core.high_runner_tools(base_df, hr_min_avg, hr_start, hr_end)
+    current_df = current_df[current_df['Tooling'].isin(_hr_tools)]
+    trend_all_df = trend_all_df[trend_all_df['Tooling'].isin(_hr_tools)]
 
 period_label = f"{pd.to_datetime(start_date).date()} to {pd.to_datetime(end_date).date()}"
 

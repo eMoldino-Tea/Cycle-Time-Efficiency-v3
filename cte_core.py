@@ -919,6 +919,66 @@ V3_GEO_COLS = [
 
 
 # ==========================================================================
+# 6d. HIGH-RUNNER TOOL FILTER (v3)
+# ==========================================================================
+# The floor the configurable threshold may not go below.
+HIGH_RUNNER_MIN_AVG_PARTS = 100
+
+# Display choice once a threshold is configured. "All Tools" is the default
+# everywhere so the filter is opt-in and never silently hides data.
+HIGH_RUNNER_DISPLAY_OPTIONS = ["High-Runner Tools Only", "All Tools"]
+
+
+def parts_produced_per_tool(df):
+    """Total parts produced per tool over whatever slice is passed in.
+
+    Parts Produced = Total_Shots x mold cavities, the same definition
+    compute_comprehensive_row uses for its 'Parts Produced' column (spec
+    "Columns + Logic" col I): row-wise, so a multi-tool slice honours each
+    tool's own cavity count, and defaulting to 1 cavity per shot when the
+    data carries no Cavities column.
+
+    Returns a Series indexed by Tooling (empty for an empty slice).
+    """
+    if df is None or df.empty or 'Tooling' not in df.columns:
+        return pd.Series(dtype=float)
+    if 'Cavities' in df.columns:
+        parts = df['Total_Shots'] * df['Cavities'].fillna(1)
+    else:
+        parts = df['Total_Shots']
+    return parts.groupby(df['Tooling']).sum()
+
+
+def high_runner_tools(df, min_avg_parts, start, end):
+    """Tooling IDs averaging at least `min_avg_parts` parts per day in
+    [start, end] (both ends inclusive).
+
+    "High runner" is a production-volume property of the tool itself, so it
+    is evaluated over its own period -- deliberately independent of the
+    dashboard's Time Range -- and expressed as a per-DAY rate. A rate rather
+    than a period total is what keeps one configured threshold meaningful
+    when the evaluation period changes length: 500 parts/day means the same
+    thing over a week as over a year, whereas a 500-part total would make
+    almost every tool qualify once the window widened.
+
+    A tool with no records in the window averages 0 and so is never a high
+    runner. Returns a sorted list of Tooling IDs.
+    """
+    if df is None or df.empty or 'Date' not in df.columns:
+        return []
+    start_ts, end_ts = pd.Timestamp(start), pd.Timestamp(end)
+    # Inclusive day count, so a start==end window is 1 day and never 0 (which
+    # would divide by zero and call every tool a high runner).
+    days = max(1, (end_ts.normalize() - start_ts.normalize()).days + 1)
+    window = df[(df['Date'] >= start_ts) & (df['Date'] <= end_ts)]
+    totals = parts_produced_per_tool(window)
+    if totals.empty:
+        return []
+    avg_per_day = totals / days
+    return sorted(avg_per_day[avg_per_day >= min_avg_parts].index.tolist())
+
+
+# ==========================================================================
 # 7. COLUMN FORMAT CONFIGS  (verbatim) -- functions so they bind at runtime
 # ==========================================================================
 def detail_col_config():

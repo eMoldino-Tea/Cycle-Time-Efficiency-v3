@@ -475,3 +475,90 @@ def test_act_weighted_deviation_trend_tooling_dim_is_act_weighted_across_tools()
     assert act_weighted != pytest.approx(plain_mean)  # sanity: methods diverge sharply
     assert t["Weighted_Deviation"].iloc[0] == pytest.approx(act_weighted, abs=1e-9)
     assert t["Weighted_Deviation"].iloc[0] != pytest.approx(plain_mean, abs=1e-6)
+
+
+# ---- High-Runner tool filter -----------------------------------------------
+def _hr_frame():
+    """Two tools over a known 10-day window (Jan 1-10 inclusive).
+
+    Tool A: 10 records x 100 shots x 2 cavities = 2,000 parts -> 200/day
+    Tool B: 10 records x 100 shots x 1 cavity  = 1,000 parts -> 100/day
+    """
+    rows = []
+    for day in range(1, 11):
+        rows.append(dict(Date=pd.Timestamp(f"2026-01-{day:02d}"), Tooling="A",
+                         Total_Shots=100, Cavities=2))
+        rows.append(dict(Date=pd.Timestamp(f"2026-01-{day:02d}"), Tooling="B",
+                         Total_Shots=100, Cavities=1))
+    return pd.DataFrame(rows)
+
+
+HR_START = pd.Timestamp("2026-01-01")
+HR_END = pd.Timestamp("2026-01-10")
+
+
+def test_parts_produced_per_tool_multiplies_by_cavities():
+    totals = core.parts_produced_per_tool(_hr_frame())
+    assert totals["A"] == 2000      # cavities=2 doubles the shot count
+    assert totals["B"] == 1000
+
+
+def test_parts_produced_per_tool_defaults_to_one_cavity_when_column_absent():
+    totals = core.parts_produced_per_tool(_hr_frame().drop(columns=["Cavities"]))
+    assert totals["A"] == 1000
+    assert totals["B"] == 1000
+
+
+def test_parts_produced_per_tool_empty_frame():
+    assert core.parts_produced_per_tool(pd.DataFrame()).empty
+
+
+def test_high_runner_threshold_is_a_per_day_average():
+    df = _hr_frame()
+    # A averages 200/day, B averages 100/day over the 10-day window.
+    assert core.high_runner_tools(df, 150, HR_START, HR_END) == ["A"]
+    assert core.high_runner_tools(df, 250, HR_START, HR_END) == []
+    assert core.high_runner_tools(df, 100, HR_START, HR_END) == ["A", "B"]
+
+
+def test_high_runner_boundary_is_inclusive():
+    """"meet or exceed" -- a tool exactly on the threshold qualifies."""
+    df = _hr_frame()
+    assert "B" in core.high_runner_tools(df, 100, HR_START, HR_END)   # B == 100/day
+    assert "B" not in core.high_runner_tools(df, 101, HR_START, HR_END)
+
+
+def test_high_runner_day_count_is_inclusive_of_both_ends():
+    """A single-day window is 1 day, not 0 -- a 0 divisor would make every
+    tool a high runner."""
+    one_day = core.high_runner_tools(_hr_frame(), 150, HR_START, HR_START)
+    # On Jan 1 alone: A produced 200 parts in 1 day, B produced 100.
+    assert one_day == ["A"]
+
+
+def test_high_runner_rate_is_stable_when_the_window_widens():
+    """The point of a per-day rate: the same threshold keeps meaning the same
+    thing over a longer evaluation period, where a period TOTAL would not."""
+    df = _hr_frame()
+    narrow = core.high_runner_tools(df, 150, HR_START, pd.Timestamp("2026-01-05"))
+    wide = core.high_runner_tools(df, 150, HR_START, HR_END)
+    assert narrow == wide == ["A"]
+
+
+def test_high_runner_ignores_records_outside_the_window():
+    df = _hr_frame()
+    later = core.high_runner_tools(df, 100, pd.Timestamp("2026-02-01"),
+                                  pd.Timestamp("2026-02-10"))
+    assert later == [], "a tool with no records in the window is never a high runner"
+
+
+def test_high_runner_empty_frame_returns_no_tools():
+    assert core.high_runner_tools(pd.DataFrame(), 100, HR_START, HR_END) == []
+
+
+def test_high_runner_minimum_allowed_threshold_is_100():
+    assert core.HIGH_RUNNER_MIN_AVG_PARTS == 100
+
+
+def test_high_runner_display_options_are_the_two_requested_choices():
+    assert core.HIGH_RUNNER_DISPLAY_OPTIONS == ["High-Runner Tools Only", "All Tools"]

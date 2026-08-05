@@ -10,6 +10,7 @@ Each level is asserted to render without raising and to produce the panels
 its spec section calls for.
 """
 import os
+import re
 import sys
 
 import pytest
@@ -232,3 +233,64 @@ def test_last_quarter_preset_scopes_to_a_complete_quarter():
     assert not at.exception
     # demo data ends 2026-07-06 (Q3), so the previous complete quarter is Q2 2026
     assert "2026-04-01 to 2026-06-30" in all_text(at)
+
+
+def _tile_total(at):
+    """The 'Total Tools' figure from the summary tile row."""
+    m = re.search(r'Total Tools</div>\s*<div class="v3-tile-num"[^>]*>([\d,]+)<',
+                  all_text(at))
+    assert m, "could not find the Total Tools tile"
+    return int(m.group(1).replace(",", ""))
+
+
+def test_high_runner_filter_defaults_to_all_tools():
+    """Opt-in by design: the filter must not silently hide tools on load."""
+    at = run_at(STACKS["global"])
+    display = [r for r in at.radio if r.label == "Display"]
+    assert display, "High-Runner Display radio not found"
+    assert display[0].value == "All Tools"
+    assert _tile_total(at) == 78     # the full demo fleet
+
+
+def test_high_runner_filter_restricts_the_dashboard_when_enabled():
+    """The threshold is raised above the demo fleet's floor before asserting.
+
+    Every demo tool averages 477-4,202 parts/day over the default 30-day
+    window, so the 100/day minimum legitimately admits all 78 -- enabling the
+    filter at its floor proves nothing. 1,000/day is inside the fleet's range
+    (55 of 78 qualify), so it exercises a real partition.
+    """
+    at = run_at(STACKS["global"])
+    before = _tile_total(at)
+    assert before == 78
+
+    box = [n for n in at.number_input
+           if n.label == "Min. average parts produced per day"][0]
+    box.set_value(1000).run()
+    [r for r in at.radio if r.label == "Display"][0].set_value(
+        "High-Runner Tools Only").run()
+    assert not at.exception
+
+    after = _tile_total(at)
+    assert 0 < after < before, (
+        "enabling High-Runner Tools Only at 1,000 parts/day should drop the "
+        f"tools below that rate (got {after} of {before})")
+
+
+def test_high_runner_filter_at_its_floor_admits_every_demo_tool():
+    """Guards the claim the test above relies on: at 100 parts/day nothing is
+    filtered, so a future data change that made the floor discriminating
+    would surface here rather than silently weakening that test."""
+    at = run_at(STACKS["global"])
+    [r for r in at.radio if r.label == "Display"][0].set_value(
+        "High-Runner Tools Only").run()
+    assert not at.exception
+    assert _tile_total(at) == 78
+
+
+def test_high_runner_threshold_input_floors_at_100():
+    at = run_at(STACKS["global"])
+    box = [n for n in at.number_input
+           if n.label == "Min. average parts produced per day"]
+    assert box, "High-Runner threshold input not found"
+    assert box[0].value == 100
