@@ -208,12 +208,18 @@ def _render_split_graph(df, freq, period_word, keyns):
 # Pies
 # --------------------------------------------------------------------------
 def _pie_figure(values, height=250):
+    # Hover reads: tier name / "<n> tools" / percentage. The count is
+    # pre-formatted per slice rather than interpolated with %{value} so a
+    # single tool reads "1 tool" instead of "1 tools".
+    counts = [f"{int(v):,} tool" if int(v) == 1 else f"{int(v):,} tools"
+              for v in values]
     fig = go.Figure(go.Pie(
         labels=['Fast', 'Within', 'Slow'], values=values, hole=0.55,
         marker=dict(colors=[ui.RED, ui.GREEN, ui.YELLOW],
                     line=dict(color='#0f1117', width=2)),
         textinfo='percent', textfont=dict(color='#0f1117', size=12, weight="bold"),
-        hovertemplate="<b>%{label}</b><br>Tools: %{value}<br>%{percent}<extra></extra>",
+        customdata=counts,
+        hovertemplate="<b>%{label}</b><br>%{customdata}<br>%{percent}<extra></extra>",
         sort=False,
     ))
     fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
