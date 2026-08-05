@@ -220,7 +220,8 @@ def _pie_figure(values, height=250):
                     line=dict(color='#0f1117', width=2)),
         textinfo='percent', textfont=dict(color='#0f1117', size=12, weight="bold"),
         customdata=counts,
-        hovertemplate="<b>%{label}</b><br>%{customdata}<br>%{percent}<extra></extra>",
+        hovertemplate=("<b>%{label}</b><br>Value: %{customdata}"
+                       "<br>Percentage: %{percent}<extra></extra>"),
         sort=False,
     ))
     fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
