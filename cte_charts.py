@@ -108,7 +108,7 @@ def _render_deviation_graph(df, dim, freq, period_word, keyns):
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         font=dict(color="#e2e8f0"),
     )
-    st.plotly_chart(fig, width="stretch", key=f"tr1_{keyns}")
+    st.plotly_chart(fig, use_container_width=True, key=f"tr1_{keyns}")
 
     t = dev.reset_index(drop=True)
     t['prev_dev'] = t['Weighted_Deviation'].shift(1)
@@ -197,7 +197,7 @@ def _render_split_graph(df, freq, period_word, keyns):
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         font=dict(color="#e2e8f0"),
     )
-    st.plotly_chart(fig, width="stretch", key=f"tr2_{keyns}")
+    st.plotly_chart(fig, use_container_width=True, key=f"tr2_{keyns}")
     st.markdown(f'<div class="v3-footnote">{TREND2_FOOTNOTE}</div>', unsafe_allow_html=True)
 
     disp = s[['label'] + [c for c in core.CT_SPLIT_COLS if c != 'bucket']].copy()
@@ -244,7 +244,7 @@ def small_multiple_pies(df, dim, tolerance_pct, keyns, max_pies=8):
                         f'font-weight:600;margin-bottom:2px;">{ui.esc(ent)}</div>',
                         unsafe_allow_html=True)
             st.plotly_chart(_pie_figure([s['fast'], s['within'], s['slow']]),
-                            width="stretch", key=f"pie_{keyns}_{dim}_{ent}")
+                            use_container_width=True, key=f"pie_{keyns}_{dim}_{ent}")
             st.markdown(f'<div style="text-align:center;color:#64748b;font-size:.78rem;">'
                         f'{s["total"]} tools</div>', unsafe_allow_html=True)
     if len(entities) > max_pies:
@@ -262,7 +262,7 @@ def single_pie(df, tolerance_pct, keyns, title="Cycle Time Efficiency Split"):
     st.markdown(f'<div style="text-align:center;color:#e2e8f0;font-size:1.05rem;'
                 f'font-weight:600;margin-bottom:4px;">{ui.esc(title)}</div>', unsafe_allow_html=True)
     st.plotly_chart(_pie_figure([s['fast'], s['within'], s['slow']], height=320),
-                    width="stretch", key=f"pie1_{keyns}")
+                    use_container_width=True, key=f"pie1_{keyns}")
 
 
 # --------------------------------------------------------------------------
@@ -309,4 +309,4 @@ def ranking_bars(df, dims, tolerance_pct, keyns, top_n=10):
                 yaxis=dict(type='category', showgrid=False, tickfont=dict(color="#e2e8f0")),
                 font=dict(color="#e2e8f0"), showlegend=False,
             )
-            st.plotly_chart(fig, width="stretch", key=f"rank_{keyns}_{metric}")
+            st.plotly_chart(fig, use_container_width=True, key=f"rank_{keyns}_{metric}")

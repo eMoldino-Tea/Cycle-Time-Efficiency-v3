@@ -145,6 +145,28 @@ def test_each_scope_level_offers_its_child_drill_table():
         assert f"{child} Detail" in t, f"{lvl} has no drill table for {child}"
 
 
+@pytest.mark.parametrize("level", sorted(STACKS))
+def test_no_level_renders_a_warning_box(level):
+    """No page may render a Streamlit warning element.
+
+    This exists because a real regression slipped through: `width="stretch"`
+    was applied to st.plotly_chart during a deprecation migration, but that
+    element takes `use_container_width` -- it has no `width` parameter, so the
+    value fell into **kwargs, was forwarded to Plotly as a config option, and
+    Streamlit rendered a deprecation warning box above all eight charts in the
+    live app.
+
+    Every existing test stayed green because they only counted that
+    plotly_chart ELEMENTS existed, which they still did. Asserting on the
+    absence of warning elements catches this whole class of bug -- a
+    deprecated or misrouted keyword argument on any element -- rather than
+    just this one instance.
+    """
+    at = run_at(STACKS[level])
+    warnings = [w.value for w in at.warning]
+    assert not warnings, f"{level} rendered {len(warnings)} warning box(es): {warnings[:2]}"
+
+
 def test_supplier_table_comma_joins_a_multi_country_supplier():
     at = run_at(STACKS["global"])
     sup = at.dataframe[-1].value  # Supplier Detail is the last table on the page
