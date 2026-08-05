@@ -32,6 +32,13 @@ STACKS = {
     "country": [("global", None), ("region", "APAC"), ("country", "China")],
     "supplier": [("global", None), ("supplier", "Foxconn")],
     "tool": [("global", None), ("supplier", "Foxconn"), ("tool", "TL-001")],
+    # The per-dimension root tabs, and Plant -- which is reachable only from
+    # its own root, never from the geography chain.
+    "region_all": [("region_all", None)],
+    "country_all": [("country_all", None)],
+    "supplier_all": [("supplier_all", None)],
+    "plant_all": [("plant_all", None)],
+    "plant": [("plant_all", None), ("plant", "Plant 5 (CN)")],
     "type_all": [("type_all", None)],
     "type": [("type_all", None), ("type", "Injection Molding")],
     "part_all": [("part_all", None)],

@@ -168,7 +168,11 @@ st.markdown(
 # ROOT TABS + BREADCRUMB
 # ==========================================================================
 with st.container(key="toptabs"):
-    _cols = st.columns([1, 1, 1, 3])
+    # Width each tab by its label length so a long one ("Global Overview")
+    # doesn't wrap while short ones ("Part") waste space, plus a trailing
+    # spacer so the row doesn't stretch edge to edge.
+    _weights = [max(1.0, len(_l) / 7.0) for _l, _ in nav.ROOTS] + [1.0]
+    _cols = st.columns(_weights)
     for _col, (_label, _root) in zip(_cols, nav.ROOTS):
         with _col:
             if st.button(_label, key=f"root_{_root}",

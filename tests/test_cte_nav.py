@@ -148,6 +148,41 @@ def _pushed_levels_in_views_source():
     return pushed
 
 
+def test_root_tabs_are_the_seven_requested_dimensions():
+    """The root tab bar's labels and order are a product requirement."""
+    assert [label for label, _ in nav.ROOTS] == [
+        "Global Overview", "Region", "Country", "Supplier", "Plant",
+        "Tooling Type", "Part",
+    ]
+
+
+def test_every_root_tab_points_at_a_real_level_with_no_filter_column():
+    for label, level in nav.ROOTS:
+        assert level in nav.LEVELS, f"root tab {label} points at unknown level {level}"
+        assert nav.LEVELS[level]['col'] is None, \
+            f"root {level} must not filter on its own column"
+        child = nav.LEVELS[level]['child']
+        assert child in nav.LEVELS, f"root {level}'s child {child} is not a level"
+
+
+def test_plant_is_a_dimension_of_its_own_not_part_of_the_geography_chain():
+    """Plant is reachable from its own root tab only.
+
+    The geography drill stays Global -> Region -> Country -> Supplier -> Tool;
+    wedging Plant into it would have changed an already-agreed hierarchy.
+    """
+    assert nav.LEVELS['plant']['col'] == 'Plant'
+    assert nav.LEVELS['plant']['child'] == 'tool'
+    assert nav.LEVELS['plant_all']['child'] == 'plant'
+    chain = []
+    lvl = 'global'
+    while lvl:
+        chain.append(lvl)
+        lvl = nav.LEVELS[lvl]['child']
+    assert chain == ['global', 'region', 'country', 'supplier', 'tool']
+    assert 'plant' not in chain
+
+
 def test_every_non_root_level_is_reachable_somewhere_in_production_source():
     root_levels = {level for _, level in nav.ROOTS}
     non_root_levels = set(nav.LEVELS) - root_levels
@@ -188,6 +223,13 @@ def test_every_level_declares_the_exact_required_trend_dim():
         "region": "Supplier",
         "country": "Supplier",
         "supplier": "Tooling",
+        # Per-dimension root tabs average across their own entity, matching
+        # type_all/part_all; the entity pages below them average across Tools.
+        "region_all": "Region",
+        "country_all": "Country",
+        "supplier_all": "Supplier",
+        "plant_all": "Plant",
+        "plant": "Tooling",
         "type_all": "Tooling Type",
         "type": "Tooling",
         "part_all": "Part",

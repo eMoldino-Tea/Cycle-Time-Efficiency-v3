@@ -166,9 +166,20 @@ def _tool_table(df, period_label, tolerance_pct):
     return t[[c for c in core.V3_TOOL_COLS if c in t.columns]]
 
 
-def render_supplier(ctx):
-    """Part C section 4 — individual supplier overview."""
-    ui.entity_badge("Supplier:", ctx.value)
+def render_entity_tools(ctx):
+    """One entity that owns tools, plus its tool list.
+
+    Serves `supplier` (spec 4), `type` and `plant`. Those three pages were
+    line-for-line identical apart from the entity's label -- a duplication a
+    review flagged as the leverage point to fix before another renderer was
+    added, which is exactly what adding Plant would have been. The label and
+    trend dimension come from the registry.
+    """
+    cfg = nav.LEVELS[ctx.level]
+    if ctx.scope.empty:
+        st.info("No data available for this selection.")
+        return
+    ui.entity_badge(f"{cfg['label']}:", ctx.value)
 
     ui.section("Summary")
     ui.summary_tiles(core.scope_summary(ctx.scope, ctx.tolerance_pct), "Tools")
@@ -183,23 +194,24 @@ def render_supplier(ctx):
         ch.ranking_bars(ctx.scope, ['Tooling'], ctx.tolerance_pct, ctx.keyns)
 
     st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
-    ch.render_trend_block(ctx.trend, nav.LEVELS['supplier']['trend_dim'], ctx.keyns)
+    ch.render_trend_block(ctx.trend, cfg['trend_dim'], ctx.keyns)
 
     st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
     ui.section("Tool Detail")
     st.caption("Select a row to open that tool's report.")
     tools = _tool_table(ctx.scope, ctx.period_label, ctx.tolerance_pct)
     if tools.empty:
-        st.info("No tool data for this supplier.")
+        st.info("No tool data for this selection.")
         return
+    key = f"ent_{ctx.keyns}"
     top = st.columns([3, 1])
     with top[0]:
-        view = ui.search_box(tools, f"tool_{ctx.keyns}")
+        view = ui.search_box(tools, key)
     with top[1]:
         st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
         ui.download_csv(ui.v3_display(view), "Export CSV",
-                        f"{ctx.value}_tools.csv", f"tool_{ctx.keyns}")
-    _table_drill(view, 'Tooling ID', 'tool', f"tool_{ctx.keyns}")
+                        f"{ctx.value}_tools.csv", key)
+    _table_drill(view, 'Tooling ID', 'tool', key)
 
 
 def render_tool(ctx):
@@ -256,86 +268,70 @@ def render_tool(ctx):
     ch.render_trend_block(ctx.trend, 'Tooling', ctx.keyns)
 
 
-def render_type_all(ctx):
-    """Part C section 5 — Tooling Type overview across all types."""
+def _all_level_cols(entity_col):
+    """Detail-table column set for an "all entities" page.
+
+    Region, Country and Plant share the V3_GEO_COLS tail with their own
+    entity column prepended; Supplier, Tooling Type and Part have their own
+    spec'd column sets.
+    """
+    if entity_col == 'Supplier':
+        return core.V3_SUPPLIER_COLS
+    if entity_col == 'Tooling Type':
+        return core.V3_TYPE_COLS
+    if entity_col == 'Part':
+        return core.V3_PART_COLS
+    return [entity_col] + core.V3_GEO_COLS
+
+
+def render_dimension_all(ctx):
+    """The "all entities in one dimension" landing page behind each root tab.
+
+    Serves region_all, country_all, supplier_all, plant_all, type_all and
+    part_all: the same page over a different entity dimension, read from the
+    registry. Adding a root tab is therefore a LEVELS entry plus a RENDERERS
+    line, not another near-duplicate renderer.
+    """
+    cfg = nav.LEVELS[ctx.level]
+    child_level = cfg['child']
+    entity_col = nav.LEVELS[child_level]['col']
+
     ui.section("Summary")
-    ui.summary_tiles(core.scope_summary(ctx.scope, ctx.tolerance_pct), "Tools")
+    ui.summary_tiles(
+        core.scope_summary(ctx.scope, ctx.tolerance_pct,
+                           entity_dim=cfg.get('count_dim', 'Tooling')),
+        cfg['entity_noun'])
+
+    if cfg.get('show_pies', True):
+        st.markdown("<br>", unsafe_allow_html=True)
+        ui.section(f"Cycle Time Efficiency by {entity_col}", size="1.1rem")
+        ch.small_multiple_pies(ctx.scope, entity_col, ctx.tolerance_pct, ctx.keyns)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    ui.section("Cycle Time Efficiency by Tooling Type", size="1.1rem")
-    ch.small_multiple_pies(ctx.scope, 'Tooling Type', ctx.tolerance_pct, ctx.keyns)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    ui.section("Saving Opportunity & Loss by Tooling Type", size="1.1rem")
-    ch.ranking_bars(ctx.scope, ['Tooling Type'], ctx.tolerance_pct, ctx.keyns)
+    ui.section(f"Saving Opportunity & Loss by {entity_col}", size="1.1rem")
+    ch.ranking_bars(ctx.scope, [entity_col], ctx.tolerance_pct, ctx.keyns)
 
     st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
-    ch.render_trend_block(ctx.trend, 'Tooling Type', ctx.keyns)
+    ch.render_trend_block(ctx.trend, cfg['trend_dim'], ctx.keyns)
 
     st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
-    ui.section("Tooling Type Detail")
-    st.caption("Select a row to open that tooling type.")
-    t = core.entity_detail_table(ctx.scope, 'Tooling Type', period_label=ctx.period_label,
-                                tolerance_pct=ctx.tolerance_pct)
+    ui.section(f"{entity_col} Detail")
+    st.caption(f"Select a row to open that {entity_col.lower()}.")
+    if entity_col == 'Part':
+        extra = ('Part Name',)
+    elif entity_col == 'Supplier':
+        extra = ('Country',)
+    else:
+        extra = ()
+    t = core.entity_detail_table(ctx.scope, entity_col, extra_cols=extra,
+                                 period_label=ctx.period_label,
+                                 tolerance_pct=ctx.tolerance_pct)
     if t.empty:
-        st.info("No tooling-type data for this scope.")
+        st.info(f"No {entity_col.lower()} data for this scope.")
         return
-    t = t[[c for c in core.V3_TYPE_COLS if c in t.columns]]
-    _table_drill(ui.search_box(t, f"type_{ctx.keyns}"), 'Tooling Type', 'type',
-                 f"type_{ctx.keyns}")
-
-
-def render_type(ctx):
-    """One selected tooling type: same page, scoped, drilling into its tools."""
-    ui.entity_badge("Tooling Type:", ctx.value)
-
-    ui.section("Summary")
-    ui.summary_tiles(core.scope_summary(ctx.scope, ctx.tolerance_pct), "Tools")
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    pie_col, rank_col = st.columns([1, 2])
-    with pie_col:
-        ch.single_pie(ctx.scope, ctx.tolerance_pct, ctx.keyns,
-                      title=f"{ctx.value} — Fast / Within / Slow")
-    with rank_col:
-        ui.section("Saving Opportunity & Loss by Tool", size="1.1rem")
-        ch.ranking_bars(ctx.scope, ['Tooling'], ctx.tolerance_pct, ctx.keyns)
-
-    st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
-    ch.render_trend_block(ctx.trend, 'Tooling', ctx.keyns)
-
-    st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
-    ui.section("Tool Detail")
-    st.caption("Select a row to open that tool's report.")
-    tools = _tool_table(ctx.scope, ctx.period_label, ctx.tolerance_pct)
-    if tools.empty:
-        st.info("No tool data for this tooling type.")
-        return
-    _table_drill(ui.search_box(tools, f"tt_{ctx.keyns}"), 'Tooling ID', 'tool', f"tt_{ctx.keyns}")
-
-
-def render_part_all(ctx):
-    """Part C section 7 — Part overview. Tiles count PARTS, not tools."""
-    ui.section("Summary")
-    ui.summary_tiles(core.scope_summary(ctx.scope, ctx.tolerance_pct, entity_dim='Part'), "Parts")
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    ui.section("Saving Opportunity & Loss by Part", size="1.1rem")
-    ch.ranking_bars(ctx.scope, ['Part'], ctx.tolerance_pct, ctx.keyns)
-
-    st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
-    ch.render_trend_block(ctx.trend, 'Part', ctx.keyns)
-
-    st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
-    ui.section("Part Detail")
-    st.caption("Select a row to open that part.")
-    p = core.entity_detail_table(ctx.scope, 'Part', extra_cols=('Part Name',),
-                                 period_label=ctx.period_label, tolerance_pct=ctx.tolerance_pct)
-    if p.empty:
-        st.info("No part data for this scope.")
-        return
-    p = p[[c for c in core.V3_PART_COLS if c in p.columns]]
-    _table_drill(ui.search_box(p, f"part_{ctx.keyns}"), 'Part', 'part', f"part_{ctx.keyns}")
+    t = t[[c for c in _all_level_cols(entity_col) if c in t.columns]]
+    key = f"all_{ctx.keyns}"
+    _table_drill(ui.search_box(t, key), entity_col, child_level, key)
 
 
 def render_part(ctx):
@@ -393,10 +389,15 @@ RENDERERS = {
     'global': render_scope_overview,
     'region': render_scope_overview,
     'country': render_scope_overview,
-    'supplier': render_supplier,
-    'type_all': render_type_all,
-    'type': render_type,
-    'part_all': render_part_all,
+    'region_all': render_dimension_all,
+    'country_all': render_dimension_all,
+    'supplier_all': render_dimension_all,
+    'plant_all': render_dimension_all,
+    'type_all': render_dimension_all,
+    'part_all': render_dimension_all,
+    'supplier': render_entity_tools,
+    'type': render_entity_tools,
+    'plant': render_entity_tools,
     'part': render_part,
     'part_tools': render_part_tools,
     'tool': render_tool,

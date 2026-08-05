@@ -52,8 +52,7 @@ DIM_PLURAL = {
     'Tooling': 'Tools',
     'Tooling Type': 'Tooling Types',
     'Part': 'Parts',
-    # Not among trend_dim's current values (Global/Region/Country's own
-    # trend_dim is 'Supplier'), but kept ready for future use.
+    'Plant': 'Plants',
     'Region': 'Regions',
     'Country': 'Countries',
 }

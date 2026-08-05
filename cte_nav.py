@@ -47,12 +47,31 @@ LEVELS = {
                    'trend_dim': 'Supplier',     'entity_noun': 'Tools'},
     'supplier':   {'label': 'Supplier',     'col': 'Supplier',     'child': 'tool',
                    'trend_dim': 'Tooling',      'entity_noun': 'Tools'},
+    # "All entities in one dimension" roots, one per root tab. Region, Country
+    # and Supplier double as drill targets inside the geography chain above;
+    # these give each of them its own top-level landing page too. Plant is
+    # only ever reached this way -- it is deliberately NOT wedged into the
+    # geography chain, which stays Global -> Region -> Country -> Supplier.
+    'region_all':   {'label': 'Region',     'col': None,           'child': 'region',
+                     'trend_dim': 'Region',     'entity_noun': 'Tools'},
+    'country_all':  {'label': 'Country',    'col': None,           'child': 'country',
+                     'trend_dim': 'Country',    'entity_noun': 'Tools'},
+    'supplier_all': {'label': 'Supplier',   'col': None,           'child': 'supplier',
+                     'trend_dim': 'Supplier',   'entity_noun': 'Tools'},
+    'plant_all':    {'label': 'Plant',      'col': None,           'child': 'plant',
+                     'trend_dim': 'Plant',      'entity_noun': 'Tools'},
+    'plant':        {'label': 'Plant',      'col': 'Plant',        'child': 'tool',
+                     'trend_dim': 'Tooling',    'entity_noun': 'Tools'},
     'type_all':   {'label': 'Tooling Type', 'col': None,           'child': 'type',
                    'trend_dim': 'Tooling Type', 'entity_noun': 'Tools'},
     'type':       {'label': 'Tooling Type', 'col': 'Tooling Type', 'child': 'tool',
                    'trend_dim': 'Tooling',      'entity_noun': 'Tools'},
+    # count_dim: the Part overview's tiles count PARTS, not tools (spec 7).
+    # show_pies: 30 parts is too many for readable small multiples, and spec 7
+    # does not ask for them.
     'part_all':   {'label': 'Part',         'col': None,           'child': 'part',
-                   'trend_dim': 'Part',         'entity_noun': 'Parts'},
+                   'trend_dim': 'Part',         'entity_noun': 'Parts',
+                   'count_dim': 'Part',         'show_pies': False},
     'part':       {'label': 'Part',         'col': 'Part',         'child': 'part_tools',
                    'trend_dim': 'Tooling',      'entity_noun': 'Tools'},
     'part_tools': {'label': 'Tools',        'col': None,           'child': 'tool',
@@ -64,6 +83,10 @@ LEVELS = {
 # Root tabs, in display order: (tab label, root level key)
 ROOTS = [
     ("Global Overview", "global"),
+    ("Region", "region_all"),
+    ("Country", "country_all"),
+    ("Supplier", "supplier_all"),
+    ("Plant", "plant_all"),
     ("Tooling Type", "type_all"),
     ("Part", "part_all"),
 ]
