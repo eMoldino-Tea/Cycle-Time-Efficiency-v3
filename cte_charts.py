@@ -141,7 +141,7 @@ def _render_deviation_graph(df, dim, freq, period_word, keyns):
 # Trend Graph 2 -- CT Split & Shot Trend (new in v3)
 # --------------------------------------------------------------------------
 def _render_split_graph(df, freq, period_word, keyns):
-    ui.section("CT Split & Shot Trend", size="1.1rem")
+    ui.section("Cycle Time Split & Shot Trend", size="1.1rem")
     split = core.ct_split_shot_trend(df, freq)
     if split.empty:
         st.info("Not enough dated data to plot a trend.")
@@ -201,7 +201,8 @@ def _render_split_graph(df, freq, period_word, keyns):
 
     disp = s[['label'] + [c for c in core.CT_SPLIT_COLS if c != 'bucket']].copy()
     disp = disp.rename(columns={'label': period_word})
-    st.dataframe(ui.style_table(disp, ui.TREND2_FMT), width="stretch", hide_index=True)
+    st.dataframe(ui.style_table(ui.v3_display(disp), ui.TREND2_FMT),
+                 width="stretch", hide_index=True)
 
 
 # --------------------------------------------------------------------------

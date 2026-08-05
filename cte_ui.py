@@ -198,6 +198,7 @@ TREND2_FMT = {
 # Core column names stay canonical; only the DISPLAY labels use the v3 wording.
 V3_DISPLAY_RENAME = {
     "CT Weighted Average Efficiency": "Cycle Time Efficiency",
+    "CT Efficiency %": "Cycle Time Efficiency %",
     "Financial Gain": "Saving Opportunity",
     "Financial Loss": "Loss",
     "Financial Gained": "Saving Opportunity",

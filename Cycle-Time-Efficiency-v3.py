@@ -129,9 +129,9 @@ st.markdown('<div class="dash-header">Cycle Time Efficiency</div>', unsafe_allow
 _fast_thr, _slow_thr = 100 + tolerance_pct, 100 - tolerance_pct
 st.markdown(
     f'<div class="dash-sub">'
-    f'Fast (Gain): &gt;{_fast_thr:g}% CT Efficiency &nbsp;|&nbsp; '
-    f'Within (Neutral): {_slow_thr:g}%–{_fast_thr:g}% CT Efficiency &nbsp;|&nbsp; '
-    f'Slow (Loss): &lt;{_slow_thr:g}% CT Efficiency &nbsp;|&nbsp; '
+    f'Fast (Gain): &gt;{_fast_thr:g}% Cycle Time Efficiency &nbsp;|&nbsp; '
+    f'Within (Neutral): {_slow_thr:g}%–{_fast_thr:g}% Cycle Time Efficiency &nbsp;|&nbsp; '
+    f'Slow (Loss): &lt;{_slow_thr:g}% Cycle Time Efficiency &nbsp;|&nbsp; '
     f'Tolerance: ±{tolerance_pct:g}%</div>',
     unsafe_allow_html=True,
 )

@@ -90,7 +90,8 @@ def test_both_trend_graphs_appear_at_every_level():
         at = run_at(STACKS[level])
         text = all_text(at)
         assert "ACT-Weighted Deviation" in text, f"{level} missing trend graph 1"
-        assert "CT Split &amp; Shot Trend" in text or "CT Split & Shot Trend" in text, \
+        assert ("Cycle Time Split &amp; Shot Trend" in text
+                or "Cycle Time Split & Shot Trend" in text), \
             f"{level} missing trend graph 2"
 
 
