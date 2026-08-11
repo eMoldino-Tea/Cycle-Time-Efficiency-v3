@@ -129,7 +129,7 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("### Master Filter")
 MASTER_FILTER_COLS = [
     "OEM Business Division", "Region", "Country", "Supplier", "Toolmaker", "Plant",
-    "Tooling Type", "Product", "Part", "Tooling",
+    "Tooling Type", "Product", "Project", "Part", "Tooling",
 ]
 _casc = current_raw.copy()
 master_selections = {}
@@ -212,10 +212,12 @@ st.markdown(
 # ROOT TABS + BREADCRUMB
 # ==========================================================================
 with st.container(key="toptabs"):
-    # Width each tab by its label length so a long one ("Global Overview")
-    # doesn't wrap while short ones ("Part") waste space, plus a trailing
-    # spacer so the row doesn't stretch edge to edge.
-    _weights = [max(1.0, len(_l) / 7.0) for _l, _ in nav.ROOTS] + [1.0]
+    # Width each tab in direct proportion to its label length, so a long one
+    # ("Global Overview") doesn't wrap while short ones ("Part") waste space.
+    # Strictly proportional, with no floor and no trailing spacer: at eight
+    # tabs a min-1.0 floor over-fed the short labels and squeezed "Country"
+    # onto two lines, and the spacer was taking width the tabs now need.
+    _weights = [float(len(_l)) for _l, _ in nav.ROOTS]
     _cols = st.columns(_weights)
     for _col, (_label, _root) in zip(_cols, nav.ROOTS):
         with _col:

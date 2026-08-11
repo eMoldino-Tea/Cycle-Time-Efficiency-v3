@@ -209,6 +209,17 @@ def load_base_data(version: int = 3):
     # PRIMARY part, which is what those scenarios were tuned against.
     part_rng = np.random.default_rng(2026)
 
+    # Project: a program grouping tools that are developed and launched
+    # together, so it deliberately cuts ACROSS suppliers, plants and tooling
+    # types -- one project's tools can sit anywhere in the supply chain. Like
+    # Country, this is a PLACEHOLDER data layer standing in until the feature
+    # connects to the platform backend, which will supply real project
+    # assignments. Its own generator again, for the same reason as part_rng:
+    # the ambient np.random sequence, and therefore every hour / shot /
+    # efficiency figure below, stays bit-identical.
+    project_rng = np.random.default_rng(4242)
+    project_pool = [f"PRJ-{i:02d}" for i in range(1, 7)]
+
     records = []
     tool_counter = 1
     for sup, (start_lvl, slope) in suppliers.items():
@@ -227,6 +238,7 @@ def load_base_data(version: int = 3):
                 _pool = [p for p in part_pools[t] if p != part]
                 tool_parts += [str(p) for p in part_rng.choice(_pool, size=min(_n_extra, len(_pool)),
                                                                replace=False)]
+            project = str(project_rng.choice(project_pool))
             plant = np.random.choice(plant_pools[t])
             oem = np.random.choice(oem_pool)
             toolmaker = np.random.choice(['TM-A', 'TM-B', 'TM-C', 'TM-D'])
@@ -288,7 +300,7 @@ def load_base_data(version: int = 3):
                         'Supplier': sup, 'Tooling Type': ttype, 'Product': product,
                         'Part': (tool_parts[0] if len(tool_parts) == 1
                                  else str(part_rng.choice(tool_parts))),
-                        'Tooling': tool_id, 'Date': date,
+                        'Tooling': tool_id, 'Date': date, 'Project': project,
                         'OEM Business Division': oem, 'Toolmaker': toolmaker,
                         'Plant': plant, 'Cavities': cavities, '_vol': volume,
                     })

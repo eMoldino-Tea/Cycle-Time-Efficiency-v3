@@ -66,6 +66,13 @@ LEVELS = {
                    'trend_dim': 'Tooling Type', 'entity_noun': 'Tools'},
     'type':       {'label': 'Tooling Type', 'col': 'Tooling Type', 'child': 'tool',
                    'trend_dim': 'Tooling',      'entity_noun': 'Tools'},
+    # Project is cross-cutting like Tooling Type and Part: a project's tools
+    # can sit under any supplier, plant or region, so it gets its own root
+    # rather than a place in the geography chain.
+    'project_all': {'label': 'Project',     'col': None,           'child': 'project',
+                    'trend_dim': 'Project',     'entity_noun': 'Tools'},
+    'project':     {'label': 'Project',     'col': 'Project',      'child': 'tool',
+                    'trend_dim': 'Tooling',     'entity_noun': 'Tools'},
     # count_dim: the Part overview's tiles count PARTS, not tools (spec 7).
     # show_pies: 30 parts is too many for readable small multiples, and spec 7
     # does not ask for them.
@@ -88,6 +95,7 @@ ROOTS = [
     ("Supplier", "supplier_all"),
     ("Plant", "plant_all"),
     ("Tooling Type", "type_all"),
+    ("Project", "project_all"),
     ("Part", "part_all"),
 ]
 

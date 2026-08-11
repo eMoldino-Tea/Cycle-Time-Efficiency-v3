@@ -55,6 +55,7 @@ DIM_PLURAL = {
     'Tooling Type': 'Tooling Types',
     'Part': 'Parts',
     'Plant': 'Plants',
+    'Project': 'Projects',
     'Region': 'Regions',
     'Country': 'Countries',
 }

@@ -40,6 +40,8 @@ STACKS = {
     "supplier_all": [("supplier_all", None)],
     "plant_all": [("plant_all", None)],
     "plant": [("plant_all", None), ("plant", "Plant 5 (CN)")],
+    "project_all": [("project_all", None)],
+    "project": [("project_all", None), ("project", "PRJ-01")],
     "type_all": [("type_all", None)],
     "type": [("type_all", None), ("type", "Injection Molding")],
     "part_all": [("part_all", None)],
@@ -181,7 +183,8 @@ def _crumb_buttons(at):
 
 
 @pytest.mark.parametrize("level", ["global", "region_all", "country_all",
-                                   "supplier_all", "plant_all", "type_all", "part_all"])
+                                   "supplier_all", "plant_all", "type_all",
+                                   "project_all", "part_all"])
 def test_a_bare_root_page_shows_no_breadcrumb(level):
     """A single-frame stack only ever repeats the root tab bar's own label
     (e.g. "Country" sitting directly under the already-selected Country tab)
@@ -294,3 +297,36 @@ def test_high_runner_threshold_input_floors_at_100():
            if n.label == "Min. average parts produced per day"]
     assert box, "High-Runner threshold input not found"
     assert box[0].value == 100
+
+
+def test_ranking_selector_offers_the_requested_dimensions_in_order():
+    """The Rank-by option list and its order are a product requirement."""
+    import cte_views as views
+    assert views.RANKING_DIMS == [
+        "Region", "Country", "Supplier", "Plant",
+        "Tooling Type", "Project", "Part",
+    ]
+
+
+def test_ranking_selector_drops_dimensions_the_scope_already_pins():
+    """Ranking by Region while drilled into one region is a one-bar chart."""
+    import cte_views as views
+    assert "Region" not in views._ranking_dims("region")
+    assert "Region" not in views._ranking_dims("country")
+    assert "Country" not in views._ranking_dims("country")
+    # everything else survives, in the same relative order
+    assert views._ranking_dims("country") == [
+        "Supplier", "Plant", "Tooling Type", "Project", "Part"]
+
+
+@pytest.mark.parametrize("level", ["global", "region_all", "country_all",
+                                   "supplier_all", "plant_all", "type_all",
+                                   "project_all", "part_all"])
+def test_every_tab_offers_the_full_ranking_selector(level):
+    """"under each tab" -- the root pages all get the same Rank-by options,
+    not just their own dimension."""
+    at = run_at(STACKS[level])
+    rank = [r for r in at.radio if r.label == "Rank by"]
+    assert rank, f"{level} has no Rank-by selector"
+    import cte_views as views
+    assert list(rank[0].options) == views._ranking_dims(level)

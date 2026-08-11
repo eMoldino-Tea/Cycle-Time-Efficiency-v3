@@ -174,11 +174,12 @@ def test_no_scroll_is_requested_before_any_navigation(session_state):
     assert nav.consume_scroll_request() is False
 
 
-def test_root_tabs_are_the_seven_requested_dimensions():
-    """The root tab bar's labels and order are a product requirement."""
+def test_root_tabs_are_the_requested_dimensions_in_order():
+    """The root tab bar's labels and order are a product requirement.
+    Project sits immediately before Part, as specified."""
     assert [label for label, _ in nav.ROOTS] == [
         "Global Overview", "Region", "Country", "Supplier", "Plant",
-        "Tooling Type", "Part",
+        "Tooling Type", "Project", "Part",
     ]
 
 
@@ -257,6 +258,8 @@ def test_every_level_declares_the_exact_required_trend_dim():
         "plant_all": "Plant",
         "plant": "Tooling",
         "type_all": "Tooling Type",
+        "project_all": "Project",
+        "project": "Tooling",
         "type": "Tooling",
         "part_all": "Part",
         "part": "Tooling",

@@ -50,6 +50,9 @@ PART_NAMES = {
     'Part-028': 'Lens Mount', 'Part-029': 'Hinge Cap', 'Part-030': 'Trim Frame',
 }
 PARTS = list(PART_NAMES.keys())
+# Mirrors cte_core's project_pool: a program grouping tools that are developed
+# and launched together, cutting across suppliers, plants and tooling types.
+PROJECTS = [f"PRJ-{i:02d}" for i in range(1, 7)]
 PLANTS = ['Plant 1 (MX)', 'Plant 2 (US)', 'Plant 3 (DE)', 'Plant 4 (PL)',
           'Plant 5 (CN)', 'Plant 6 (VN)', 'Plant 7 (BR)']
 # Plant -> (Country, Region); mirrors cte_core.PLANT_META.
@@ -100,6 +103,7 @@ def generate(num_tools=80, weeks=52, end_date=None, seed=None):
         if _n_extra:
             _pool = [p for p in PARTS if p != part]
             tool_parts += [str(p) for p in rng.choice(_pool, size=_n_extra, replace=False)]
+        project = str(rng.choice(PROJECTS))
         plant = rng.choice(PLANTS)
         oem = rng.choice(OEM_DIVISIONS)
         toolmaker = rng.choice(TOOLMAKERS)
@@ -138,7 +142,7 @@ def generate(num_tools=80, weeks=52, end_date=None, seed=None):
                     'Supplier': sup, 'Tooling Type': ttype, 'Product': product,
                     'Part': (tool_parts[0] if len(tool_parts) == 1
                              else str(rng.choice(tool_parts))),
-                    'Tooling': tool_id, 'Date': date,
+                    'Tooling': tool_id, 'Date': date, 'Project': project,
                     'OEM Business Division': oem, 'Toolmaker': toolmaker,
                     'Plant': plant, 'Cavities': cavities,
                     'Total_Shots': shots, 'ACT': act, 'Actual_CT': actual_ct,

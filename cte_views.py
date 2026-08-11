@@ -142,17 +142,27 @@ def render_scope_overview(ctx):
     _table_drill(view, 'Supplier', 'supplier', f"sup_{ctx.keyns}")
 
 
-def _ranking_dims(level):
-    """Part C's ranking dimensions per level.
+# The dimensions the "Rank by" selector offers, in the order the product
+# owner specified. Note there is no 'Tooling' here: tool-level ranking was
+# dropped from this selector when Plant and Project were added. Ranking by
+# individual tool still exists inside a supplier / tooling type / plant /
+# project page, which ranks its own tools (see render_entity_tools).
+RANKING_DIMS = ['Region', 'Country', 'Supplier', 'Plant',
+                'Tooling Type', 'Project', 'Part']
 
-    Global (D8) ranks by Region, Country, Supplier, Tool, Part AND Tooling
-    Type; Region drops Region; Country drops Region and Country.
+
+def _ranking_dims(level):
+    """The ranking dimensions offered at a given level.
+
+    Every dimension in RANKING_DIMS, minus any the current scope has already
+    pinned to a single value -- ranking by Region while drilled into one
+    region would render a one-bar chart.
     """
-    if level == 'global':
-        return ['Region', 'Country', 'Supplier', 'Tooling', 'Part', 'Tooling Type']
     if level == 'region':
-        return ['Country', 'Supplier', 'Tooling', 'Part']
-    return ['Supplier', 'Tooling', 'Part']
+        return [d for d in RANKING_DIMS if d != 'Region']
+    if level == 'country':
+        return [d for d in RANKING_DIMS if d not in ('Region', 'Country')]
+    return list(RANKING_DIMS)
 
 
 def _tool_table(df, period_label, tolerance_pct):
@@ -308,8 +318,10 @@ def render_dimension_all(ctx):
         ch.small_multiple_pies(ctx.scope, entity_col, ctx.tolerance_pct, ctx.keyns)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    ui.section(f"Saving Opportunity & Loss by {entity_col}", size="1.1rem")
-    ch.ranking_bars(ctx.scope, [entity_col], ctx.tolerance_pct, ctx.keyns)
+    # Same Rank-by selector as the scope pages, so every tab can rank by any
+    # dimension rather than only its own.
+    ui.section("Saving Opportunity & Loss Ranking", size="1.1rem")
+    ch.ranking_bars(ctx.scope, _ranking_dims(ctx.level), ctx.tolerance_pct, ctx.keyns)
 
     st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
     ch.render_trend_block(ctx.trend, cfg['trend_dim'], ctx.keyns)
@@ -394,9 +406,11 @@ RENDERERS = {
     'supplier_all': render_dimension_all,
     'plant_all': render_dimension_all,
     'type_all': render_dimension_all,
+    'project_all': render_dimension_all,
     'part_all': render_dimension_all,
     'supplier': render_entity_tools,
     'type': render_entity_tools,
+    'project': render_entity_tools,
     'plant': render_entity_tools,
     'part': render_part,
     'part_tools': render_part_tools,
