@@ -212,13 +212,13 @@ st.markdown(
 # ROOT TABS + BREADCRUMB
 # ==========================================================================
 with st.container(key="toptabs"):
-    # Width each tab in direct proportion to its label length, so a long one
-    # ("Global Overview") doesn't wrap while short ones ("Part") waste space.
-    # Strictly proportional, with no floor and no trailing spacer: at eight
-    # tabs a min-1.0 floor over-fed the short labels and squeezed "Country"
-    # onto two lines, and the spacer was taking width the tabs now need.
-    _weights = [float(len(_l)) for _l, _ in nav.ROOTS]
-    _cols = st.columns(_weights)
+    # Equal column weights don't matter here: cte_ui's CSS forces every
+    # column in this row to shrink-to-fit its own button (flex:0 0 auto)
+    # rather than grow to its weighted share, so column width is exactly the
+    # button's own width and the row's `gap` is the only space between tabs
+    # -- uniform by construction, unlike weighting columns by label length,
+    # which produced visibly uneven gaps (see that CSS rule's comment).
+    _cols = st.columns(len(nav.ROOTS), gap="large")
     for _col, (_label, _root) in zip(_cols, nav.ROOTS):
         with _col:
             if st.button(_label, key=f"root_{_root}",

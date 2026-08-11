@@ -122,6 +122,16 @@ header {background-color:transparent !important;}
 .st-key-toptabs {
   border-bottom:1px solid #2d3748; margin-bottom:1.75rem; padding-bottom:0;
 }
+/* Streamlit's st.columns grows each column to fill its weighted share of the
+   row, then left-aligns the button inside it -- so the visual gap between
+   two tabs is "leftover column width" plus the fixed inter-column gap, and
+   that leftover varies per label in a way plain character-count weighting
+   can't predict (fixed button padding doesn't scale with label length the
+   same way rendered text width does), producing uneven spacing. Forcing
+   every column to shrink-to-fit its own button removes the leftover
+   entirely, so the row's own `gap` becomes the ONLY space between tabs --
+   which is uniform by construction. */
+.st-key-toptabs [data-testid="stColumn"] {flex:0 0 auto !important; width:auto !important;}
 
 .st-key-subtabs {
   background-color:#1a1d26 !important; border:1px solid #2d3748 !important;
