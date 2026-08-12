@@ -24,12 +24,14 @@ import cte_ui as ui
 HOVERLABEL_LEFT = dict(align="left")
 
 TREND2_FOOTNOTE = (
-    "Faster / Within / Slower = share of shots produced faster than, within "
+    "Fast / Within / Slow Shots = share of shots produced faster than, within "
     "(±tolerance of), or slower than the Approved Cycle Time · shot-weighted "
     "across all tools with cycle-time data · bars show all recorded shots. "
-    "At or Better Than ACT = Faster% + Within%; it is a different measure "
-    "from the Cycle Time Efficiency shown elsewhere, which is the shot-share "
-    "weighted average of the three category efficiencies."
+    "The Cycle Time Efficiency figure here = Fast Shots% + Within Shots% "
+    "(share of shots at or better than the Approved Cycle Time) -- a "
+    "DIFFERENT calculation from the Cycle Time Efficiency shown on tiles and "
+    "tables elsewhere, which is a shot-share weighted average of each "
+    "tier's own efficiency, not a share of shots."
 )
 
 
@@ -154,10 +156,10 @@ def _render_split_graph(df, freq, period_word, keyns):
     bucket_word = "active months" if freq == 'M' else "active quarters"
     st.markdown(
         f'<div class="v3-statline">'
-        f'<b>At or Better Than ACT {summ["ct_compliance"]:.0f}%</b> &nbsp;·&nbsp; '
-        f'<span style="color:{ui.RED};">Faster {summ["pct_fast"]:.0f}%</span> &nbsp;·&nbsp; '
-        f'<span style="color:{ui.GREEN};">Within {summ["pct_within"]:.0f}%</span> &nbsp;·&nbsp; '
-        f'<span style="color:{ui.YELLOW};">Slower {summ["pct_slow"]:.0f}%</span> &nbsp;·&nbsp; '
+        f'<b>Cycle Time Efficiency {summ["ct_compliance"]:.0f}%</b> &nbsp;·&nbsp; '
+        f'<span style="color:{ui.RED};">Fast Shots {summ["pct_fast"]:.0f}%</span> &nbsp;·&nbsp; '
+        f'<span style="color:{ui.GREEN};">Within Shots {summ["pct_within"]:.0f}%</span> &nbsp;·&nbsp; '
+        f'<span style="color:{ui.YELLOW};">Slow Shots {summ["pct_slow"]:.0f}%</span> &nbsp;·&nbsp; '
         f'{summ["total_shots"]:,} shots &nbsp;·&nbsp; '
         f'{summ["active_buckets"]} {bucket_word}</div>',
         unsafe_allow_html=True)

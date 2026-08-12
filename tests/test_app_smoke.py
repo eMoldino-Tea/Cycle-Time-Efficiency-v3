@@ -99,12 +99,17 @@ def test_both_trend_graphs_appear_at_every_level():
 
 
 def test_trend_graph_2_stat_line_and_footnote():
+    """The stat line's four metric labels, per an explicit product request
+    to use this exact wording -- including "Cycle Time Efficiency", which
+    deliberately re-collides with the canonical metric of the same name
+    shown on tiles/tables elsewhere. The footnote is where that collision
+    gets disambiguated in words, so it must still be present."""
     at = run_at(STACKS["global"])
     text = all_text(at)
-    assert "At or Better Than ACT" in text
+    for label in ("Cycle Time Efficiency", "Fast Shots", "Within Shots", "Slow Shots"):
+        assert label in text, f"stat line missing {label!r}"
     assert "active months" in text
-    # the footnote that keeps CT Compliance distinct from CT Efficiency
-    assert "different measure from the Cycle Time Efficiency" in text
+    assert "DIFFERENT calculation from the Cycle Time Efficiency shown on tiles" in text
 
 
 def test_tool_report_shows_identity_and_a_dropdown_for_a_multi_part_tool():

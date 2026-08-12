@@ -785,20 +785,24 @@ def ct_split_shot_trend(df, freq='M'):
 def ct_split_summary(df, freq='M'):
     """Headline stat line above Trend Graph 2.
 
-    NOTE ON NAMING: the dict key `ct_compliance` is an internal name only --
-    the UI label is "At or Better Than ACT" (renamed from "CT Compliance";
-    the old label collided with a different meaning in the backend spec).
-    Do not resurrect "CT Compliance" as the headline label.
+    NOTE ON NAMING: the dict key `ct_compliance` is an internal name only.
+    Its UI label has moved twice -- "CT Compliance" (collided with a
+    different meaning in the backend spec) -> "At or Better Than ACT"
+    (collision-free, but not what the product owner wanted) -> "Cycle Time
+    Efficiency" (current, per an explicit request to use that exact word).
+    The CURRENT label deliberately RE-INTRODUCES a collision: this value and
+    the app's canonical Weighted CT Efficiency (calc_weighted_eff) are both
+    now called "Cycle Time Efficiency" despite being different calculations.
+    That was a known, named tradeoff at the time of the rename, not an
+    oversight -- Graph 2's footnote is where the disambiguation now has to
+    live, in words rather than in the label, so it must always accompany
+    this value.
 
     The value is Faster% + Within% -- the share of shots produced at or
     better than the approved cycle time. Since pct_within is defined as
     `100 - pct_fast - pct_slow`, this is algebraically identical to
-    `100 - pct_slow`: it is NOT independent information from the Slower%
-    figure rendered alongside it, just its complement. It is also a
-    DIFFERENT metric from the app's canonical Weighted CT Efficiency
-    (calc_weighted_eff) and from the backend spec's own within-band-only
-    `ct_compliance`. Always render it with the Graph 2 footnote so the three
-    meanings are never confused.
+    `100 - pct_slow`: it is NOT independent information from the Slow Shots%
+    figure rendered alongside it, just its complement.
 
     Returns dict: pct_fast, pct_within, pct_slow, ct_compliance, total_shots,
     active_buckets. Percentages are 0.0 when there are no shots.
