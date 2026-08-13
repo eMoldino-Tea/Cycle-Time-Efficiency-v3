@@ -45,13 +45,14 @@ LEVELS = {
                    'trend_dim': 'Supplier',     'entity_noun': 'Tools'},
     'country':    {'label': 'Country',      'col': 'Country',      'child': 'supplier',
                    'trend_dim': 'Supplier',     'entity_noun': 'Tools'},
-    'supplier':   {'label': 'Supplier',     'col': 'Supplier',     'child': 'tool',
+    'supplier':   {'label': 'Supplier',     'col': 'Supplier',     'child': 'plant',
                    'trend_dim': 'Tooling',      'entity_noun': 'Tools'},
-    # "All entities in one dimension" roots, one per root tab. Region, Country
-    # and Supplier double as drill targets inside the geography chain above;
-    # these give each of them its own top-level landing page too. Plant is
-    # only ever reached this way -- it is deliberately NOT wedged into the
-    # geography chain, which stays Global -> Region -> Country -> Supplier.
+    # "All entities in one dimension" roots, one per root tab. Region, Country,
+    # Supplier and Plant all double as drill targets inside the geography
+    # chain above; these give each of them its own top-level landing page too.
+    # The chain is Global -> Region -> Country -> Supplier -> Plant -> Tool,
+    # so a Plant page is reachable BOTH by drilling down from its supplier and
+    # straight from the Plant tab.
     'region_all':   {'label': 'Region',     'col': None,           'child': 'region',
                      'trend_dim': 'Region',     'entity_noun': 'Tools'},
     'country_all':  {'label': 'Country',    'col': None,           'child': 'country',
@@ -83,6 +84,12 @@ LEVELS = {
                    'trend_dim': 'Tooling',      'entity_noun': 'Tools'},
     'part_tools': {'label': 'Tools',        'col': None,           'child': 'tool',
                    'trend_dim': 'Tooling',      'entity_noun': 'Tools'},
+    # Where a card / pie / ranking-bar click lands: a filtered list of the
+    # underlying tools. col is None because the filter it carries is richer
+    # than "column == value" (a per-tool performance tier, a money metric, or
+    # a dimension value), so render_tool_list applies it rather than scope_df.
+    'tool_list':  {'label': 'Tools',        'col': None,           'child': 'tool',
+                   'trend_dim': 'Tooling',      'entity_noun': 'Tools'},
     'tool':       {'label': 'Tool',         'col': 'Tooling',      'child': None,
                    'trend_dim': 'Tooling',      'entity_noun': 'Tools', 'exclusive': True},
 }
@@ -102,6 +109,7 @@ ROOTS = [
 _STACK_KEY = 'v3_nav_stack'
 _EPOCH_KEY = 'v3_nav_epoch'
 _SCROLL_KEY = 'v3_scroll_pending'
+_FWD_KEY = 'v3_nav_forward'
 
 
 # ---- pure helpers (no Streamlit) -----------------------------------------
@@ -143,13 +151,32 @@ def scope_df(df, stack):
     return out
 
 
+def frame_label(level, value):
+    """The breadcrumb text for one (level, value) frame.
+
+    Roots (value None) show their level label. Ordinary frames show their own
+    value. tool_list frames carry a tuple describing WHICH tools they list --
+    ('tier', 'Slow') / ('metric', 'loss') / ('dim', 'Region', 'APAC') -- which
+    is rendered here as readable text rather than a raw tuple.
+    """
+    if isinstance(value, tuple):
+        kind = value[0]
+        if kind == 'tier':
+            return "All Tools" if value[1] == 'All' else f"{value[1]} Tools"
+        if kind == 'metric':
+            return {'saving': 'Saving Opportunity', 'loss': 'Loss'}.get(value[1], 'Tools')
+        if kind == 'dim':
+            return f"{value[2]} Tools"
+        return "Tools"
+    if value is None:
+        return LEVELS[level]['label']
+    return str(value)
+
+
 def crumb_labels(stack):
     """[(index, label)] for the breadcrumb: root uses its level label, every
     later frame uses its own value."""
-    crumbs = []
-    for i, (level, value) in enumerate(stack):
-        crumbs.append((i, LEVELS[level]['label'] if value is None else str(value)))
-    return crumbs
+    return [(i, frame_label(level, value)) for i, (level, value) in enumerate(stack)]
 
 
 def child_of(level):
@@ -193,26 +220,53 @@ def consume_scroll_request():
     return bool(st.session_state.pop(_SCROLL_KEY, False))
 
 
+def forward_frames():
+    """Frames trimmed off by pop_to and still re-reachable, outermost first."""
+    return st.session_state.get(_FWD_KEY, [])
+
+
 def set_root(level):
     """Switch root tab: discard the stack and start fresh at `level`."""
     st.session_state[_STACK_KEY] = [(level, None)]
+    st.session_state[_FWD_KEY] = []       # a new root abandons the old branch
     _mark_navigated()
 
 
 def push(level, value):
     get_stack().append((level, value))
+    # Drilling somewhere new abandons any forward history, the way a browser
+    # does: the path you went back from is no longer where you are heading.
+    st.session_state[_FWD_KEY] = []
     _mark_navigated()
 
 
 def pop_to(index):
-    """Truncate the stack to `index` inclusive. Never leaves the stack empty
-    -- the root frame is always kept, even for out-of-range or negative
-    indices."""
+    """Truncate the stack to `index` inclusive, keeping what was trimmed so
+    the user can go forward again.
+
+    Never leaves the stack empty -- the root frame is always kept, even for
+    out-of-range or negative indices.
+    """
     stack = get_stack()
     frames = stack[:index + 1]
     if not frames:
         frames = stack[:1]
+    trimmed = stack[len(frames):]
+    if trimmed:
+        # Newly trimmed frames sit in front of anything already parked, so
+        # repeated back-steps rebuild the path in the right order.
+        st.session_state[_FWD_KEY] = trimmed + forward_frames()
     st.session_state[_STACK_KEY] = frames
+    _mark_navigated()
+
+
+def go_forward():
+    """Re-enter the next frame that pop_to trimmed. No-op when there is none."""
+    fwd = forward_frames()
+    if not fwd:
+        return
+    get_stack().append(fwd[0])
+    st.session_state[_FWD_KEY] = fwd[1:]
     _mark_navigated()
 
 

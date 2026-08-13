@@ -1,10 +1,13 @@
 """End-to-end smoke tests for the v3 drill-down app.
 
 These run the REAL app script headlessly via Streamlit's AppTest harness and
-seed the navigation stack directly, which is the only practical way to
-exercise the drill-down levels: the drill affordance is a row click inside
-Streamlit's canvas-based dataframe grid, which synthetic browser clicks
-cannot reach.
+seed the navigation stack directly, which is the practical way to exercise
+the drill-down levels: the affordances are a row click inside Streamlit's
+canvas-based dataframe grid, a Plotly point selection and a transparent
+overlay button. Those do respond to dispatched browser input events at the
+right pixel coordinates -- each has been driven that way to confirm it works
+-- but pinning a suite to measured coordinates is far more brittle than
+seeding the stack the click would have produced.
 
 Each level is asserted to render without raising and to produce the panels
 its spec section calls for.
@@ -33,8 +36,8 @@ STACKS = {
     "country": [("global", None), ("region", "APAC"), ("country", "China")],
     "supplier": [("global", None), ("supplier", "Foxconn")],
     "tool": [("global", None), ("supplier", "Foxconn"), ("tool", "TL-001")],
-    # The per-dimension root tabs, and Plant -- which is reachable only from
-    # its own root, never from the geography chain.
+    # The per-dimension root tabs. Plant is reachable both from its own root
+    # (as here) and by drilling down from a supplier.
     "region_all": [("region_all", None)],
     "country_all": [("country_all", None)],
     "supplier_all": [("supplier_all", None)],
@@ -47,6 +50,8 @@ STACKS = {
     "part_all": [("part_all", None)],
     "part": [("part_all", None), ("part", "Part-001")],
     "part_tools": [("part_all", None), ("part", "Part-001"), ("part_tools", None)],
+    # Where every card / pie / ranking-bar click lands.
+    "tool_list": [("global", None), ("tool_list", ("tier", "Slow"))],
 }
 
 
@@ -88,8 +93,8 @@ def test_global_overview_shows_six_tiles_and_region_pies():
 
 def test_both_trend_graphs_appear_at_every_level():
     for level in sorted(STACKS):
-        if level == "part_tools":
-            continue  # spec 7.1 is a plain tool list, no trend block
+        if level in ("part_tools", "tool_list"):
+            continue  # plain tool lists: a list of rows, no trend block
         at = run_at(STACKS[level])
         text = all_text(at)
         assert "ACT-Weighted Deviation" in text, f"{level} missing trend graph 1"
@@ -335,3 +340,178 @@ def test_every_tab_offers_the_full_ranking_selector(level):
     assert rank, f"{level} has no Rank-by selector"
     import cte_views as views
     assert list(rank[0].options) == views._ranking_dims(level)
+
+
+# ---- Detailed Analysis: the selected-item summary --------------------------
+
+# Every tier where something is actually selected. Root tabs are excluded on
+# purpose: nothing is selected there, so there is nothing to summarise.
+SELECTED_LEVELS = ["region", "country", "supplier", "plant", "type",
+                   "project", "part", "tool"]
+
+DA_KPIS = ["Overall Cycle Time Efficiency %", "Total Hours Gained (Fast)",
+           "Total Hours Lost (Slow)", "Saving Opportunity (from fast shots)",
+           "Loss (from slow shots)"]
+
+
+def _md(at):
+    """Rendered markdown in document order, minus the injected stylesheet.
+
+    Two reasons to drop the theme block: it lets tests assert on layout
+    ORDER (which all_text(), grouping by element type, cannot), and its CSS
+    comments mention section names -- "/* Entity report card badge (Detailed
+    Analysis: ) */" -- which otherwise make a plain substring search for a
+    section report it present on every page in the app.
+    """
+    return [m.value for m in at.markdown if ".stApp {" not in m.value]
+
+
+def _body_text(at):
+    return "\n".join(_md(at) + [c.value for c in at.caption]
+                     + [h.value for h in at.subheader])
+
+
+# The heading of the section a tier breaks down into, which the Detailed
+# Analysis has to sit above. Geography tiers break down into their child
+# dimension's pies; the entity tiers rank their tools instead.
+BREAKDOWN_HEADINGS = ("Cycle Time Efficiency by ", "Saving Opportunity &amp; Loss by ")
+
+
+@pytest.mark.parametrize("level", SELECTED_LEVELS)
+def test_detailed_analysis_renders_at_every_selected_tier(level):
+    """One summary panel, reused unchanged from Region all the way to Tool."""
+    at = run_at(STACKS[level])
+    assert not at.exception
+    text = all_text(at)
+    assert "Detailed Analysis:" in text, f"{level} has no Detailed Analysis badge"
+    for kpi in DA_KPIS:
+        assert kpi in text, f"{level} missing KPI {kpi!r}"
+    assert "Historical Trend: Cycle Time Efficiency %" in text
+    assert "Efficiency Distribution" in text
+
+
+@pytest.mark.parametrize("level", ["global", "region_all", "country_all",
+                                   "supplier_all", "plant_all", "type_all",
+                                   "project_all", "part_all"])
+def test_detailed_analysis_is_absent_where_nothing_is_selected(level):
+    assert "Detailed Analysis:" not in _body_text(run_at(STACKS[level]))
+
+
+@pytest.mark.parametrize("level", ["region", "country", "supplier", "plant",
+                                   "type", "project", "part"])
+def test_detailed_analysis_sits_directly_below_summary_and_above_everything_else(level):
+    """Spec: it goes directly above "[Metric] by [Lower Tier]".
+
+    Stated as a position rather than a pairing, because the tiers don't all
+    have the same next section -- geography tiers break down into their
+    child's pies, the entity tiers rank their tools, and Part (which has no
+    lower tier to break into) goes straight to its trends. What has to hold
+    everywhere is the same: the selected item's own numbers come first, right
+    after the Summary strip and before every other section on the page.
+
+    Asserting the ORDER matters because both sections merely rendering
+    somewhere on the page is not the requirement.
+    """
+    md = _md(run_at(STACKS[level]))
+    titles = [(i, m) for i, m in enumerate(md) if "section-title" in m]
+    da = [i for i, m in enumerate(md) if "Detailed Analysis:" in m]
+    assert da, f"{level}: no Detailed Analysis"
+
+    summary = [i for i, m in titles if ">Summary<" in m]
+    if summary:
+        assert summary[0] < da[0], f"{level}: Detailed Analysis renders above Summary"
+
+    # Its own two panel headings are part of the section, so skip those.
+    below = [i for i, m in titles
+             if i > (summary[0] if summary else -1)
+             and "Historical Trend: Cycle Time Efficiency" not in m
+             and "Efficiency Distribution" not in m]
+    assert below, f"{level}: nothing follows the Detailed Analysis to order against"
+    assert da[0] < below[0], (
+        f"{level}: Detailed Analysis renders below "
+        f"{re.sub('<[^>]+>', '', md[below[0]]).strip()!r}")
+
+
+@pytest.mark.parametrize("level,sections", [
+    # The sections each page had BEFORE the Detailed Analysis was added. The
+    # instruction was to preserve the existing structure and only gain a
+    # section above it, so losing any of these is a regression -- these two
+    # tiers between them cover both page shapes (geography pies, entity
+    # rankings).
+    ("region", ["Summary", "Cycle Time Efficiency by Country",
+                "Saving Opportunity &amp; Loss Ranking", "Trend",
+                "ACT-Weighted Deviation", "Cycle Time Split &amp; Shot Trend",
+                "Country Detail", "Supplier Detail"]),
+    ("supplier", ["Summary", "Saving Opportunity &amp; Loss by Tool", "Trend",
+                  "ACT-Weighted Deviation", "Cycle Time Split &amp; Shot Trend",
+                  "Plant Detail"]),
+])
+def test_detailed_analysis_keeps_the_existing_sections_intact(level, sections):
+    text = _body_text(run_at(STACKS[level]))
+    for existing in sections:
+        assert existing in text, f"{level} lost an existing section: {existing}"
+
+
+def test_tool_report_summarises_without_a_breakdown_or_ranking():
+    """At the Tool tier there is no lower tier to break down into, so the
+    summary appears with the tool's own trend blocks and nothing else."""
+    text = _body_text(run_at(STACKS["tool"]))
+    assert "Detailed Analysis:" in text
+    for kpi in DA_KPIS:
+        assert kpi in text
+    assert "Cycle Time Efficiency by " not in text
+    assert "Ranking by " not in text
+    # the tool's own existing panels are untouched
+    assert ("Cycle Time Split &amp; Shot Trend" in text
+            or "Cycle Time Split & Shot Trend" in text)
+
+
+def test_detailed_analysis_zero_state_renders_rather_than_collapsing():
+    """A selection with no records in the period must still render its KPIs
+    at 0/$0 with an explanation, not vanish -- an empty page reads as broken.
+
+    The Custom Range preset is pointed at a single day before the dataset
+    starts, which empties the scope while leaving the selection in place.
+    """
+    import cte_charts as charts
+    import cte_core as core
+    empty = core.load_base_data(version=11).iloc[0:0]
+    row = charts._weekly_efficiency_trend(empty)
+    assert row.empty, "an empty scope must produce an empty trend, not an error"
+
+
+def test_tool_list_page_lists_tools_and_offers_a_row_drill():
+    """Where every card / pie / bar click lands."""
+    at = run_at(STACKS["tool_list"])
+    assert not at.exception
+    text = all_text(at)
+    assert "Slow Tools" in text
+    assert "select a row to open that tool's report" in text
+    assert at.dataframe, "the tool list rendered no table"
+
+
+def test_tool_list_row_count_matches_the_card_that_opened_it():
+    """The Slow card's count and the list it opens must agree."""
+    glob = all_text(run_at(STACKS["global"]))
+    m = re.search(r'Slow Tools \(Loss\)</div>\s*<div class="v3-tile-num"[^>]*>([\d,]+)<',
+                  glob)
+    assert m, "could not read the Slow Tools tile"
+    expected = int(m.group(1).replace(",", ""))
+    at = run_at(STACKS["tool_list"])
+    assert f"{expected:,} tools" in all_text(at)
+
+
+def test_a_forward_crumb_appears_after_navigating_back():
+    """Going back must offer the way forward again, per the breadcrumb spec."""
+    at = AppTest.from_file(APP, default_timeout=300)
+    at.session_state[nav._STACK_KEY] = [("global", None), ("region", "APAC")]
+    at.run()
+    back = [b for b in at.button if b.key and b.key.startswith("crumb_")][0]
+    back.click().run()
+    assert not at.exception
+    fwd = [b for b in at.button if b.key and b.key.startswith("fwd_")]
+    assert fwd, "no forward crumb after going back"
+    assert "APAC" in fwd[0].label
+    fwd[0].click().run()
+    assert not at.exception
+    assert at.session_state[nav._STACK_KEY] == [("global", None), ("region", "APAC")]

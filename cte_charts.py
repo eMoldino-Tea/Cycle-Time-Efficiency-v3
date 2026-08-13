@@ -242,10 +242,13 @@ def small_multiple_pies(df, dim, tolerance_pct, keyns, max_pies=8):
 
     Each pie is that entity's own Fast/Within/Slow split, counted over its
     tools (the same classification the summary tiles above use).
+
+    Returns the entity whose caption was clicked this run, else None.
     """
     entities = sorted(df[dim].dropna().unique().tolist())
     if not entities:
-        return
+        return None
+    clicked = None
     shown = entities[:max_pies]
     cols = st.columns(len(shown), gap="small")
     for col, ent in zip(cols, shown):
@@ -259,11 +262,18 @@ def small_multiple_pies(df, dim, tolerance_pct, keyns, max_pies=8):
                         unsafe_allow_html=True)
             st.plotly_chart(_pie_figure([s['fast'], s['within'], s['slow']]),
                             use_container_width=True, key=f"pie_{keyns}_{dim}_{ent}")
-            st.markdown(f'<div class="v3-pie-count">{s["total"]} tools</div>',
-                        unsafe_allow_html=True)
+            # The caption is the click target rather than the slice itself:
+            # Streamlit's plotly selection API is built around cartesian
+            # charts, so pie-slice clicks are not dependable. A button styled
+            # as the caption keeps the pies visually untouched and the whole
+            # affordance obvious.
+            if st.button(f'{s["total"]} tools', key=f"piebtn_{keyns}_{dim}_{ent}",
+                         help=f"View {ent} tools"):
+                clicked = ent
     if len(entities) > max_pies:
         st.caption(f"Showing {max_pies} of {len(entities)} {dim.lower()}s — "
                    f"use the Master Filter to narrow further.")
+    return clicked
 
 
 def single_pie(df, tolerance_pct, keyns, title="Cycle Time Efficiency Split"):
@@ -289,6 +299,8 @@ def ranking_bars(df, dims, tolerance_pct, keyns, top_n=10):
     'Tooling', 'Part', 'Tooling Type'] for the Global Overview. Rendered as a
     dimension picker plus paired gain/loss bar charts, so all six rankings are
     available without six stacked charts.
+
+    Returns (dimension, entity) for a clicked bar, else None.
     """
     dims = [d for d in dims if d in df.columns]
     if not dims:
@@ -298,7 +310,8 @@ def ranking_bars(df, dims, tolerance_pct, keyns, top_n=10):
     loss = core.ranking_by_financial(df, pick, 'Financial Lost', top_n, tolerance_pct)
     if gain.empty:
         st.info("No data available for this ranking.")
-        return
+        return None
+    clicked = None
 
     left, right = st.columns(2)
     for col, data, metric, color, title in [
@@ -324,4 +337,130 @@ def ranking_bars(df, dims, tolerance_pct, keyns, top_n=10):
                 font=dict(color="#e2e8f0"), showlegend=False,
                 hoverlabel=HOVERLABEL_LEFT,
             )
-            st.plotly_chart(fig, use_container_width=True, key=f"rank_{keyns}_{metric}")
+            sel = st.plotly_chart(fig, use_container_width=True,
+                                  key=f"rank_{keyns}_{metric}",
+                                  on_select="rerun", selection_mode="points")
+            # Bars are cartesian, where Streamlit's point selection works --
+            # the y value of the clicked point is the entity name.
+            pts = (sel or {}).get("selection", {}).get("points", [])
+            if pts:
+                clicked = (pick, pts[0].get("y"))
+    return clicked
+
+
+# --------------------------------------------------------------------------
+# Detailed Analysis -- the selected-item summary shown at every tier below a
+# root tab. Layout carried over from the Executive dashboard's report card
+# (5 KPIs, then a trend/donut pair), so a reader moving between the two apps
+# sees the same thing.
+# --------------------------------------------------------------------------
+def _weekly_efficiency_trend(df):
+    """Weighted CT Efficiency % per week, for the Historical Trend panel.
+
+    Weekly buckets (not the monthly/quarterly buckets the two big trend
+    graphs use) because this panel is scoped to the selected item and the
+    selected period, where weeks give a readable number of points.
+    """
+    if df is None or df.empty or 'Date' not in df.columns:
+        return pd.DataFrame(columns=['bucket', 'Efficiency_%'])
+    d = df.copy()
+    d['bucket'] = d['Date'].dt.to_period('W').dt.start_time
+    return (d.groupby('bucket')
+             .apply(core.calc_weighted_eff)
+             .reset_index(name='Efficiency_%')
+             .dropna(subset=['Efficiency_%'])
+             .sort_values('bucket'))
+
+
+def render_detailed_analysis(scope, label, keyns, period_label, tolerance_pct,
+                             group_col='Tooling ID'):
+    """Selected-item summary: badge, 5 KPIs, then trend + distribution.
+
+    Rendered for whatever is currently selected -- a region, country,
+    supplier, plant, tooling type, project, part or tool -- with only the
+    badge name and the underlying data changing. Every figure comes from
+    compute_comprehensive_row on the selected scope, so this panel can never
+    disagree with the tables below it.
+
+    Zero-state is deliberate rather than collapsed: a selection with no
+    records still renders its KPIs at 0/$0 with an explanatory message in
+    each panel, so an empty result reads as "nothing here in this period"
+    instead of a page that looks broken.
+    """
+    ui.entity_badge("Detailed Analysis:", label)
+
+    empty = scope is None or scope.empty
+    if empty:
+        eff = gained = lost = saving = loss = 0.0
+    else:
+        row = core.compute_comprehensive_row(label, scope, group_col, period_label,
+                                             tolerance_pct=tolerance_pct)
+        eff = row['CT Weighted Average Efficiency']
+        gained, lost = row['Hours Gained'], row['Hours Lost']
+        saving, loss = row['Financial Gain'], row['Financial Loss']
+
+    kpis = [
+        ("Overall Cycle Time Efficiency %",
+         "0%" if empty or pd.isna(eff) else f"{eff:.1f}%"),
+        ("Total Hours Gained (Fast)", core.format_hm(gained)),
+        ("Total Hours Lost (Slow)", core.format_hm(lost)),
+        ("Saving Opportunity (from fast shots)", f"${saving:,.0f}"),
+        ("Loss (from slow shots)", f"${loss:,.0f}"),
+    ]
+    for col, (klabel, kvalue) in zip(st.columns(5), kpis):
+        with col:
+            st.markdown(f'<div class="v3-kpi-label">{ui.esc(klabel)}</div>'
+                        f'<div class="v3-kpi-value">{ui.esc(kvalue)}</div>',
+                        unsafe_allow_html=True)
+
+    st.markdown("<hr style='border-color:#2d3748;margin:1.5rem 0;'>", unsafe_allow_html=True)
+
+    left, right = st.columns([1.4, 1])
+    with left:
+        ui.section("Historical Trend: Cycle Time Efficiency %", size="1.1rem")
+        trend = pd.DataFrame() if empty else _weekly_efficiency_trend(scope)
+        if trend.empty:
+            st.info("No data for selected period.")
+        else:
+            lfig = go.Figure()
+            lfig.add_trace(go.Scatter(
+                x=trend['bucket'], y=trend['Efficiency_%'],
+                mode="lines+markers", line=dict(color="#7dd3fc", width=2.5),
+                marker=dict(size=6),
+                hovertemplate="<b>%{x|%b %d, %Y}</b><br>Efficiency: %{y:.2f}%<extra></extra>",
+            ))
+            lfig.add_hline(y=100, line_dash="dash", line_color=ui.GREY)
+            lfig.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                height=380, margin=dict(l=10, r=20, t=20, b=10),
+                xaxis=dict(showgrid=False, tickfont=dict(color="#94a3b8"), title="Date"),
+                yaxis=dict(showgrid=True, gridcolor="#334155", title="Efficiency_%",
+                           tickfont=dict(color="#94a3b8")),
+                font=dict(color="#e2e8f0"), hoverlabel=HOVERLABEL_LEFT,
+            )
+            st.plotly_chart(lfig, use_container_width=True, key=f"da_trend_{keyns}")
+    with right:
+        ui.section("Efficiency Distribution", size="1.1rem")
+        if empty:
+            st.info("No data for selected period.")
+        else:
+            vals = [row.get('Fast Shots (%)', 0) or 0,
+                    row.get('Within Shots (%)', 0) or 0,
+                    row.get('Slow Shots (%)', 0) or 0]
+            rpie = go.Figure(go.Pie(
+                labels=['Fast', 'Within', 'Slow'], values=vals, hole=0.55,
+                marker=dict(colors=[ui.RED, ui.GREEN, ui.YELLOW],
+                            line=dict(color='#0f1117', width=2)),
+                textinfo='percent',
+                textfont=dict(color='#0f1117', size=13, weight="bold"),
+                hovertemplate="<b>%{label}</b><br>Percentage: %{value:.1f}%<extra></extra>",
+            ))
+            rpie.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                height=380, margin=dict(l=10, r=10, t=10, b=10), showlegend=True,
+                legend=dict(orientation="v", yanchor="middle", y=0.5,
+                            xanchor="left", x=1.02,
+                            font=dict(color="#e2e8f0", size=12)),
+                font=dict(color="#e2e8f0"), hoverlabel=HOVERLABEL_LEFT,
+            )
+            st.plotly_chart(rpie, use_container_width=True, key=f"da_pie_{keyns}")

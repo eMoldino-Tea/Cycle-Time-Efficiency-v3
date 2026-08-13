@@ -124,6 +124,20 @@ def _pushed_levels_in_views_source():
     bodies = _get_function_bodies(src)
 
     pushed = set()
+
+    # Literal pushes from ANY function in the module, not just the
+    # RENDERERS-mapped ones: drill clicks are routed through a shared helper
+    # (_handle_clicks), so restricting the scan to renderer bodies would miss
+    # every level reachable that way and wrongly call it unreachable.
+    for body in bodies.values():
+        for raw in (_extract_call_arglists(body, "_drill")
+                    + _extract_call_arglists(body, "nav.push")):
+            args = _split_top_level_args(raw)
+            if args:
+                lit = re.fullmatch(r"['\"](\w+)['\"]", args[0])
+                if lit:
+                    pushed.add(lit.group(1))
+
     for level_key, func_name in renderers.items():
         body = bodies.get(func_name, "")
 
@@ -192,23 +206,26 @@ def test_every_root_tab_points_at_a_real_level_with_no_filter_column():
         assert child in nav.LEVELS, f"root {level}'s child {child} is not a level"
 
 
-def test_plant_is_a_dimension_of_its_own_not_part_of_the_geography_chain():
-    """Plant is reachable from its own root tab only.
+def test_plant_sits_in_the_geography_chain_and_also_has_its_own_root():
+    """Plant is reachable two ways, by explicit product decision.
 
-    The geography drill stays Global -> Region -> Country -> Supplier -> Tool;
-    wedging Plant into it would have changed an already-agreed hierarchy.
+    It sits in the drill chain between Supplier and Tool (so a breadcrumb can
+    read Global > APAC > China > Supplier X > Plant Y > Tool Z) AND keeps its
+    own root tab, so it can be entered directly without going through a
+    supplier. A Plant page therefore has two possible parents depending on
+    the route taken; the nav stack records which one was used.
     """
     assert nav.LEVELS['plant']['col'] == 'Plant'
     assert nav.LEVELS['plant']['child'] == 'tool'
     assert nav.LEVELS['plant_all']['child'] == 'plant'
+    assert ('Plant', 'plant_all') in nav.ROOTS
+
     chain = []
     lvl = 'global'
     while lvl:
         chain.append(lvl)
         lvl = nav.LEVELS[lvl]['child']
-    assert chain == ['global', 'region', 'country', 'supplier', 'tool']
-    assert 'plant' not in chain
-
+    assert chain == ['global', 'region', 'country', 'supplier', 'plant', 'tool']
 
 def test_every_non_root_level_is_reachable_somewhere_in_production_source():
     root_levels = {level for _, level in nav.ROOTS}
@@ -238,7 +255,8 @@ def test_level_registry_chain_is_complete():
     assert nav.LEVELS["global"]["child"] == "region"
     assert nav.LEVELS["region"]["child"] == "country"
     assert nav.LEVELS["country"]["child"] == "supplier"
-    assert nav.LEVELS["supplier"]["child"] == "tool"
+    assert nav.LEVELS["supplier"]["child"] == "plant"
+    assert nav.LEVELS["plant"]["child"] == "tool"
     assert nav.LEVELS["tool"]["child"] is None
     assert nav.LEVELS["part"]["child"] == "part_tools"
     assert nav.LEVELS["part_tools"]["child"] == "tool"
@@ -264,6 +282,7 @@ def test_every_level_declares_the_exact_required_trend_dim():
         "part_all": "Part",
         "part": "Tooling",
         "part_tools": "Tooling",
+        "tool_list": "Tooling",
         "tool": "Tooling",
     }
     required_keys = {"label", "col", "child", "trend_dim", "entity_noun"}

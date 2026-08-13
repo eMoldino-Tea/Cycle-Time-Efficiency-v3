@@ -65,6 +65,26 @@ def _table_drill(df, label_col, level, keyns):
             _drill(level, df.iloc[idx][label_col])
 
 
+
+def _handle_clicks(card, pie_click, pie_dim, bar_click):
+    """Route a summary-card / pie-caption / ranking-bar click to a tool list.
+
+    All three land on the same tool_list level, differing only in the filter
+    tuple they carry, so one page renders every drill-down destination.
+    """
+    if card:
+        if card in ('saving', 'loss'):
+            _drill('tool_list', ('metric', card))
+        elif card == 'total':
+            _drill('tool_list', ('tier', 'All'))
+        else:
+            _drill('tool_list', ('tier', card.capitalize()))
+    if pie_click is not None:
+        _drill('tool_list', ('dim', pie_dim, pie_click))
+    if bar_click is not None:
+        _drill('tool_list', ('dim', bar_click[0], bar_click[1]))
+
+
 def render_scope_overview(ctx):
     """Global (level 1), Region (2) and Country (3) overviews.
 
@@ -77,15 +97,27 @@ def render_scope_overview(ctx):
 
     # --- A. Summary ---
     ui.section("Summary")
-    ui.summary_tiles(core.scope_summary(ctx.scope, ctx.tolerance_pct), cfg['entity_noun'])
+    card = ui.summary_tiles(core.scope_summary(ctx.scope, ctx.tolerance_pct),
+                            cfg['entity_noun'], keyns=ctx.keyns)
+
+    # Selected-item summary, above the by-child breakdown. Roots have nothing
+    # selected, so it only appears once the reader has drilled into something.
+    if ctx.value is not None:
+        st.markdown("<hr style='border-color:#2d3748;margin:1.5rem 0;'>", unsafe_allow_html=True)
+        ch.render_detailed_analysis(ctx.scope, ctx.value, ctx.keyns,
+                                    ctx.period_label, ctx.tolerance_pct,
+                                    group_col=cfg['col'] or 'Tooling ID')
+        st.markdown("<hr style='border-color:#2d3748;margin:1.5rem 0;'>", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
     ui.section(f"Cycle Time Efficiency by {child_dim}", size="1.1rem")
-    ch.small_multiple_pies(ctx.scope, child_dim, ctx.tolerance_pct, ctx.keyns)
+    pie_click = ch.small_multiple_pies(ctx.scope, child_dim, ctx.tolerance_pct, ctx.keyns)
 
     st.markdown("<br>", unsafe_allow_html=True)
     ui.section("Saving Opportunity & Loss Ranking", size="1.1rem")
-    ch.ranking_bars(ctx.scope, _ranking_dims(ctx.level), ctx.tolerance_pct, ctx.keyns)
+    bar_click = ch.ranking_bars(ctx.scope, _ranking_dims(ctx.level),
+                                ctx.tolerance_pct, ctx.keyns)
+    _handle_clicks(card, pie_click, child_dim, bar_click)
 
     # --- B. Trend ---
     st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
@@ -165,15 +197,22 @@ def _ranking_dims(level):
     return list(RANKING_DIMS)
 
 
-def _tool_table(df, period_label, tolerance_pct):
-    """Tool rows in v3's canonical tool-table shape (Part C decision 9)."""
-    t = core.entity_detail_table(df, 'Tooling',
-                                 extra_cols=('Region', 'Country', 'Plant'),
+def _tool_table(df, period_label, tolerance_pct, extra_cols=()):
+    """Tool rows in v3's canonical tool-table shape (Part C decision 9).
+
+    `extra_cols` appends metric-relevant columns for drill-down lists (see
+    _DRILL_EXTRA_COLS) without disturbing the canonical column order.
+    """
+    descriptive = ('Region', 'Country', 'Plant') + tuple(
+        c for c in extra_cols if c not in core.COMPREHENSIVE_TOOLING_COLS)
+    t = core.entity_detail_table(df, 'Tooling', extra_cols=descriptive,
                                  period_label=period_label, tolerance_pct=tolerance_pct)
     if t.empty:
         return t
     t = t.rename(columns={'Tooling': 'Tooling ID'})
-    return t[[c for c in core.V3_TOOL_COLS if c in t.columns]]
+    cols = list(core.V3_TOOL_COLS) + [c for c in extra_cols
+                                      if c not in core.V3_TOOL_COLS]
+    return t[[c for c in cols if c in t.columns]]
 
 
 def render_entity_tools(ctx):
@@ -192,28 +231,54 @@ def render_entity_tools(ctx):
     ui.entity_badge(f"{cfg['label']}:", ctx.value)
 
     ui.section("Summary")
-    ui.summary_tiles(core.scope_summary(ctx.scope, ctx.tolerance_pct), "Tools")
+    card = ui.summary_tiles(core.scope_summary(ctx.scope, ctx.tolerance_pct),
+                            "Tools", keyns=ctx.keyns)
 
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("<hr style='border-color:#2d3748;margin:1.5rem 0;'>", unsafe_allow_html=True)
+    ch.render_detailed_analysis(ctx.scope, ctx.value, ctx.keyns,
+                                ctx.period_label, ctx.tolerance_pct,
+                                group_col=cfg['col'] or 'Tooling ID')
+    st.markdown("<hr style='border-color:#2d3748;margin:1.5rem 0;'>", unsafe_allow_html=True)
+
     pie_col, rank_col = st.columns([1, 2])
     with pie_col:
         ch.single_pie(ctx.scope, ctx.tolerance_pct, ctx.keyns,
                       title=f"{ctx.value} — Fast / Within / Slow")
     with rank_col:
         ui.section("Saving Opportunity & Loss by Tool", size="1.1rem")
-        ch.ranking_bars(ctx.scope, ['Tooling'], ctx.tolerance_pct, ctx.keyns)
+        bar_click = ch.ranking_bars(ctx.scope, ['Tooling'], ctx.tolerance_pct, ctx.keyns)
+    _handle_clicks(card, None, None, bar_click)
 
     st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
     ch.render_trend_block(ctx.trend, cfg['trend_dim'], ctx.keyns)
 
     st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
+    # Follow the registry: a Supplier's child is now Plant, so a supplier page
+    # lists its plants and a plant page lists its tools. Tools stay reachable
+    # from a supplier in one click via the summary cards and ranking bars.
+    child_level = cfg['child']
+    child_dim = nav.LEVELS[child_level]['col'] if child_level else None
+    key = f"ent_{ctx.keyns}"
+    if child_dim and child_dim != 'Tooling':
+        child_label = nav.LEVELS[child_level]['label']
+        ui.section(f"{child_label} Detail")
+        st.caption(f"Select a row to open that {child_label.lower()}.")
+        kids = core.entity_detail_table(ctx.scope, child_dim,
+                                        period_label=ctx.period_label,
+                                        tolerance_pct=ctx.tolerance_pct)
+        if kids.empty:
+            st.info(f"No {child_label.lower()} data for this selection.")
+            return
+        kids = kids[[child_dim] + [c for c in core.V3_GEO_COLS if c in kids.columns]]
+        _table_drill(ui.search_box(kids, key), child_dim, child_level, key)
+        return
+
     ui.section("Tool Detail")
     st.caption("Select a row to open that tool's report.")
     tools = _tool_table(ctx.scope, ctx.period_label, ctx.tolerance_pct)
     if tools.empty:
         st.info("No tool data for this selection.")
         return
-    key = f"ent_{ctx.keyns}"
     top = st.columns([3, 1])
     with top[0]:
         view = ui.search_box(tools, key)
@@ -221,6 +286,81 @@ def render_entity_tools(ctx):
         st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
         ui.download_csv(ui.v3_display(view), "Export CSV",
                         f"{ctx.value}_tools.csv", key)
+    _table_drill(view, 'Tooling ID', 'tool', key)
+
+
+
+# Extra columns worth surfacing per drill-down origin: clicking a loss figure
+# should show what drives loss, a saving figure what drives saving. The base
+# set is always V3_TOOL_COLS so a tool list is recognisable wherever it came
+# from -- these are appended, not substituted.
+_DRILL_EXTRA_COLS = {
+    'saving': ['Hours Gained', 'Shots Gained'],
+    'loss': ['Hours Lost', 'Shots Lost'],
+}
+
+
+def _tools_matching(scope, spec, tolerance_pct):
+    """The tools a drill-down click selected, plus the columns that explain it.
+
+    `spec` is the tuple carried by a tool_list nav frame:
+      ('tier', 'Fast'|'Within'|'Slow'|'All') -- a summary card's tier count,
+          classified PER TOOL by weighted efficiency (the same classification
+          the card counted), not per record.
+      ('metric', 'saving'|'loss') -- the money cards and ranking bars.
+      ('dim', column, value)      -- a pie caption or a ranking bar on a
+          dimension, e.g. every tool in one region.
+    Returns (filtered_scope, extra_columns).
+    """
+    kind = spec[0]
+    if kind == 'dim':
+        col, val = spec[1], spec[2]
+        sub = scope[scope[col] == val] if col in scope.columns else scope.iloc[0:0]
+        # Show the dimension itself unless a tool row already carries it.
+        extra = [] if col in core.V3_TOOL_COLS else [col]
+        return sub, extra
+    if kind == 'metric':
+        which = spec[1]
+        money = 'Financial_Gain' if which == 'saving' else 'Financial_Loss'
+        keep = (scope.groupby('Tooling')[money].sum() > 0)
+        tools = keep[keep].index
+        return scope[scope['Tooling'].isin(tools)], _DRILL_EXTRA_COLS[which]
+    # tier
+    tier = spec[1]
+    if tier == 'All':
+        return scope, []
+    eff = core.entity_efficiency(scope, 'Tooling', tolerance_pct)
+    tools = eff.loc[eff['Performance Status'] == tier, 'Tooling']
+    return scope[scope['Tooling'].isin(tools)], []
+
+
+def render_tool_list(ctx):
+    """The tool list a card / pie / ranking-bar click opens.
+
+    Terminal-but-one: every row drills into that tool's own report, which is
+    what makes each of those clicks a genuine path into the data rather than
+    a dead-end number.
+    """
+    spec = ctx.value
+    sub, extra = _tools_matching(ctx.scope, spec, ctx.tolerance_pct)
+    ui.entity_badge("Tools:", nav.frame_label('tool_list', spec))
+
+    if sub.empty:
+        st.info("No tools match this selection for the current filters and date range.")
+        return
+
+    tools = _tool_table(sub, ctx.period_label, ctx.tolerance_pct, extra_cols=extra)
+    if tools.empty:
+        st.info("No tools match this selection for the current filters and date range.")
+        return
+    st.caption(f"{len(tools):,} tools · select a row to open that tool's report.")
+    key = f"tl_{ctx.keyns}"
+    top = st.columns([3, 1])
+    with top[0]:
+        view = ui.search_box(tools, key)
+    with top[1]:
+        st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
+        ui.download_csv(ui.v3_display(view), "Export CSV", "tools.csv", key)
     _table_drill(view, 'Tooling ID', 'tool', key)
 
 
@@ -275,6 +415,14 @@ def render_tool(ctx):
     n.metric("Loss", f"${row['Financial Loss']:,.0f}")
 
     st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
+    # Terminal tier: same summary as every other tier, but no
+    # breakdown-by-lower-tier, ranking or child-distribution charts, because
+    # there is no tier below a tool.
+    ch.render_detailed_analysis(ctx.scope, ctx.value, ctx.keyns,
+                                ctx.period_label, ctx.tolerance_pct,
+                                group_col='Tooling ID')
+
+    st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
     ch.render_trend_block(ctx.trend, 'Tooling', ctx.keyns)
 
 
@@ -307,21 +455,25 @@ def render_dimension_all(ctx):
     entity_col = nav.LEVELS[child_level]['col']
 
     ui.section("Summary")
-    ui.summary_tiles(
+    card = ui.summary_tiles(
         core.scope_summary(ctx.scope, ctx.tolerance_pct,
                            entity_dim=cfg.get('count_dim', 'Tooling')),
-        cfg['entity_noun'])
+        cfg['entity_noun'], keyns=ctx.keyns)
 
+    pie_click = None
     if cfg.get('show_pies', True):
         st.markdown("<br>", unsafe_allow_html=True)
         ui.section(f"Cycle Time Efficiency by {entity_col}", size="1.1rem")
-        ch.small_multiple_pies(ctx.scope, entity_col, ctx.tolerance_pct, ctx.keyns)
+        pie_click = ch.small_multiple_pies(ctx.scope, entity_col,
+                                           ctx.tolerance_pct, ctx.keyns)
 
     st.markdown("<br>", unsafe_allow_html=True)
     # Same Rank-by selector as the scope pages, so every tab can rank by any
     # dimension rather than only its own.
     ui.section("Saving Opportunity & Loss Ranking", size="1.1rem")
-    ch.ranking_bars(ctx.scope, _ranking_dims(ctx.level), ctx.tolerance_pct, ctx.keyns)
+    bar_click = ch.ranking_bars(ctx.scope, _ranking_dims(ctx.level),
+                                ctx.tolerance_pct, ctx.keyns)
+    _handle_clicks(card, pie_click, entity_col, bar_click)
 
     st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
     ch.render_trend_block(ctx.trend, cfg['trend_dim'], ctx.keyns)
@@ -353,6 +505,13 @@ def render_part(ctx):
         return
     names = sorted(ctx.scope['Part Name'].dropna().unique().tolist())
     ui.entity_badge("Part:", f"{ctx.value} — {', '.join(names)}" if names else str(ctx.value))
+
+    st.markdown("<hr style='border-color:#2d3748;margin:1.5rem 0;'>", unsafe_allow_html=True)
+    # Part tier aggregates across every tool that makes this part -- no single
+    # tool needs selecting for the summary to be meaningful.
+    ch.render_detailed_analysis(ctx.scope, ctx.value, ctx.keyns,
+                                ctx.period_label, ctx.tolerance_pct, group_col='Part')
+    st.markdown("<hr style='border-color:#2d3748;margin:1.5rem 0;'>", unsafe_allow_html=True)
 
     row = core.compute_comprehensive_row(ctx.value, ctx.scope, 'Part', ctx.period_label,
                                          tolerance_pct=ctx.tolerance_pct)
@@ -414,5 +573,6 @@ RENDERERS = {
     'plant': render_entity_tools,
     'part': render_part,
     'part_tools': render_part_tools,
+    'tool_list': render_tool_list,
     'tool': render_tool,
 }

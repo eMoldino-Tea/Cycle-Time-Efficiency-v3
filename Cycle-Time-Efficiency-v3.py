@@ -232,7 +232,16 @@ def _crumb_click(index):
     st.rerun()
 
 
-ui.render_breadcrumb(nav.crumb_labels(nav.get_stack()), _crumb_click)
+def _forward_click():
+    nav.go_forward()
+    st.rerun()
+
+
+ui.render_breadcrumb(
+    nav.crumb_labels(nav.get_stack()), _crumb_click,
+    forward=[nav.frame_label(lvl, val) for lvl, val in nav.forward_frames()],
+    on_forward=_forward_click,
+)
 
 # Land the reader at the top of a page they just navigated to. One-shot, so
 # ordinary reruns (tolerance slider, table search) leave their scroll alone.

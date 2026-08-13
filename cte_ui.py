@@ -185,10 +185,23 @@ header {background-color:transparent !important;}
 .st-key-breadcrumb button {
   font-size:.9rem !important; font-weight:600 !important; padding:.25rem .6rem !important;
   background-color:transparent !important; border:none !important; box-shadow:none !important;
+  white-space:nowrap !important;
 }
+/* Same shrink-to-fit treatment as the root tab bar, for the same reason and
+   with one extra: entity names vary wildly in length ("APAC" vs "New Era
+   Molds"), and an equal-weight column narrower than its label wraps the
+   crumb onto two lines, which then sits vertically misaligned against its
+   single-line neighbours. Sizing each column to its own crumb makes the
+   row's `gap` the only spacing and keeps every crumb on one line. */
+.st-key-breadcrumb [data-testid="stColumn"] {flex:0 0 auto !important; width:auto !important;}
+.st-key-breadcrumb [data-testid="stHorizontalBlock"] {align-items:center !important;}
 .st-key-breadcrumb button[kind="primary"] { color:#fff !important; }
 .st-key-breadcrumb button[kind="secondary"] { color:#7dd3fc !important; }
 .st-key-breadcrumb button[kind="secondary"]:hover { color:#bae6fd !important; text-decoration:underline; }
+/* Frames stepped back from: visible so the path forward isn't lost, but
+   muted and inert -- only the next one is re-enterable in a single click. */
+.v3-crumb-ahead {font-size:.9rem; font-weight:600; color:#475569; padding:.25rem .6rem;
+  white-space:nowrap;}
 
 /* v3 six-tile summary strip */
 .v3-tile {background:#1a1d26;border:1px solid #2d3748;border-radius:14px;
@@ -208,6 +221,42 @@ header {background-color:transparent !important;}
 .v3-tile-num {font-size:clamp(1.15rem, 2.1vw, 1.9rem);font-weight:800;
   line-height:1.1;white-space:nowrap;}
 .v3-tile-sub {font-size:.82rem;color:#64748b;line-height:1.3;min-height:2.2rem;margin-top:4px;}
+
+/* Clickable summary cards. The card itself is an HTML div and Streamlit can
+   attach no handler to that, so each card renders a real st.button which is
+   pulled up over the card it follows and made fully transparent: the card
+   keeps its exact appearance, and the whole card area is the click target.
+   The negative margin is the card's own height, so the button covers it. */
+[class*="st-key-v3cards"] [data-testid="stColumn"] {position:relative;}
+/* The button is rendered after its card, so it is the column's LAST element
+   container -- position THAT, not the inner .stButton: Streamlit collapses
+   the container to 16x0, so an absolutely-positioned child inside it has
+   nothing to stretch against and inset:0 does nothing. */
+[class*="st-key-v3cards"] [data-testid="stElementContainer"]:last-child {
+  position:absolute; inset:0; z-index:3; margin:0 !important; width:auto !important;
+}
+[class*="st-key-v3cards"] [data-testid="stElementContainer"]:last-child [data-testid="stButton"] {
+  height:100% !important; width:100% !important; margin:0 !important;
+}
+/* Position the button itself against the (absolute) container rather than
+   relying on height:100% cascading through Streamlit's wrapper divs -- the
+   wrapper keeps its natural 28px button height, so a percentage height
+   resolves to 28px and the overlay covers only the card's top strip. */
+[class*="st-key-v3cards"] [data-testid="stElementContainer"]:last-child button {
+  position:absolute !important; inset:0 !important;
+  width:100% !important; height:auto !important; margin:0 !important; padding:0 !important;
+  background:transparent !important; border:1px solid transparent !important;
+  box-shadow:none !important; color:transparent !important; font-size:0 !important;
+  border-radius:14px !important; min-height:0 !important;
+}
+[class*="st-key-v3cards"] [data-testid="stElementContainer"]:last-child button:hover {
+  background:rgba(255,255,255,.04) !important; border:1px solid #3a4a63 !important;
+}
+
+/* Detailed Analysis: label-over-value KPI row, no card borders. */
+.v3-kpi-label {font-size:.85rem;color:#94a3b8;font-weight:600;margin-bottom:4px;line-height:1.3;
+  min-height:2.3rem;}
+.v3-kpi-value {font-size:2.1rem;font-weight:700;color:#fff;line-height:1.1;white-space:nowrap;}
 
 /* "N tools" caption under each small-multiple pie */
 .v3-pie-count {text-align:center; color:#cbd5e1; font-size:1rem; font-weight:700;
@@ -374,11 +423,20 @@ def _tile(label, value, color, sub=""):
             f'<div class="v3-tile-sub">{esc(sub)}</div></div>')
 
 
-def summary_tiles(summary, entity_noun="Tools"):
+# Stable identifiers for the six cards, in render order -- what a click
+# returns, so callers switch on these rather than on display text that the
+# entity_noun changes ("Total Tools" vs "Total Parts").
+TILE_KEYS = ['total', 'fast', 'within', 'slow', 'saving', 'loss']
+
+
+def summary_tiles(summary, entity_noun="Tools", keyns=None):
     """The six v3 summary tiles: total / fast / within / slow / saving / loss.
 
     `summary` is a cte_core.scope_summary() dict. Applies at every level, so
     the tile row is identical from Global down to a single supplier.
+
+    Pass `keyns` to make the cards clickable; returns the TILE_KEYS entry of
+    whichever card was clicked this run, else None.
     """
     def _pct(p):
         return f"{p:.1f}%" if p is not None else "—"
@@ -391,29 +449,54 @@ def summary_tiles(summary, entity_noun="Tools"):
         ("Saving Opportunity", f"${summary['saving_opportunity']:,.0f}", GREEN, "from fast shots"),
         ("Loss", f"${summary['loss']:,.0f}", YELLOW, "from slow shots"),
     ]
-    c = st.columns(6, gap="small")
-    for col, (label, value, color, sub) in zip(c, tiles):
-        with col:
-            st.markdown(_tile(label, value, color, sub), unsafe_allow_html=True)
+    # `keyns` opts the row into click-to-drill: each card gets a transparent
+    # button laid over it (see the .st-key-v3cards CSS), so the card keeps its
+    # exact appearance and the whole card is the click target. Returns the key
+    # of the clicked card, or None. Without a keyns the row is inert, exactly
+    # as before.
+    if keyns is None:
+        c = st.columns(6, gap="small")
+        for col, (label, value, color, sub) in zip(c, tiles):
+            with col:
+                st.markdown(_tile(label, value, color, sub), unsafe_allow_html=True)
+        return None
+
+    clicked = None
+    with st.container(key=f"v3cards_{keyns}"):
+        c = st.columns(6, gap="small")
+        for col, (card_key, (label, value, color, sub)) in zip(c, zip(TILE_KEYS, tiles)):
+            with col:
+                st.markdown(_tile(label, value, color, sub), unsafe_allow_html=True)
+                if st.button(label, key=f"card_{card_key}_{keyns}", help=f"View {label}"):
+                    clicked = card_key
+    return clicked
 
 
-def render_breadcrumb(frames, on_click):
-    """Clickable breadcrumb for the nav stack.
+def render_breadcrumb(frames, on_click, forward=None, on_forward=None):
+    """Clickable breadcrumb for the nav stack, with forward history.
 
     frames: list of (index, display_label) — the last one is the current page
     and is rendered inert. on_click(index) is called when an earlier crumb is
-    clicked; the caller is responsible for popping the stack and rerunning.
+    clicked; the caller pops the stack and reruns.
 
-    A single frame means the reader is sitting at a bare root page (e.g. just
-    "Country"), which only ever repeats the label the root tab bar already
-    shows immediately above it -- render nothing rather than that redundant
-    one-crumb line. The breadcrumb earns its place once there's an actual
-    path to show, i.e. two or more frames.
+    forward: labels of frames a back-step trimmed but which are still
+    re-reachable, outermost first. They render greyed-out after the current
+    page, and the first one is a button calling on_forward() — so stepping
+    back never destroys where you were, and the path forward stays visible
+    rather than silently vanishing.
+
+    A lone frame with nothing parked forward is a bare root page (e.g. just
+    "Country"), which only repeats the label the root tab bar already shows
+    immediately above it -- render nothing rather than that redundant
+    one-crumb line. The breadcrumb earns its place once there is an actual
+    path to show.
     """
-    if len(frames) < 2:
+    forward = forward or []
+    if len(frames) < 2 and not forward:
         return
+    n = len(frames) + len(forward)
     with st.container(key="breadcrumb"):
-        cols = st.columns([1] * len(frames) + [max(1, 8 - len(frames))])
+        cols = st.columns([1] * n + [max(1, 9 - n)])
         for col, (idx, label) in zip(cols, frames):
             with col:
                 is_last = idx == frames[-1][0]
@@ -421,3 +504,16 @@ def render_breadcrumb(frames, on_click):
                              type="primary" if is_last else "secondary"):
                     if not is_last:
                         on_click(idx)
+        for offset, label in enumerate(forward):
+            with cols[len(frames) + offset]:
+                # Only the immediately-next frame is re-enterable in one
+                # click; the rest are shown for context so the reader can see
+                # the whole path they stepped back along.
+                if offset == 0 and on_forward is not None:
+                    if st.button(f"›  {label}", key=f"fwd_{offset}_{label}",
+                                 type="secondary", help="Go forward"):
+                        on_forward()
+                else:
+                    st.markdown(
+                        f'<div class="v3-crumb-ahead">›&nbsp;&nbsp;{esc(label)}</div>',
+                        unsafe_allow_html=True)
