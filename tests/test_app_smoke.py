@@ -442,7 +442,9 @@ def test_detailed_analysis_sits_directly_below_summary_and_above_everything_else
                 "Saving Opportunity &amp; Loss Ranking", "Trend",
                 "ACT-Weighted Deviation", "Cycle Time Split &amp; Shot Trend",
                 "Country Detail", "Supplier Detail"]),
-    ("supplier", ["Summary", "Saving Opportunity &amp; Loss by Tool", "Trend",
+    # The supplier ranking is titled "... Ranking" (not "... by Tool") and
+    # ranks the tiers below a supplier, per the hierarchy-scoping rule.
+    ("supplier", ["Summary", "Saving Opportunity &amp; Loss Ranking", "Trend",
                   "ACT-Weighted Deviation", "Cycle Time Split &amp; Shot Trend",
                   "Plant Detail"]),
 ])

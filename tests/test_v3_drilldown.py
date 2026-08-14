@@ -1,10 +1,11 @@
-"""Tests for the three v3 drill-down additions.
+"""Tests for the v3 drill-down additions.
 
   1. Clicking any figure (summary card, saving/loss card, pie caption,
      ranking bar) opens the list of tools that figure was computed from.
   2. A "Detailed Analysis" summary for whatever is currently selected,
      rendered at every tier from Region down to Tool.
   3. A breadcrumb that walks backwards AND forwards through the drill path.
+  4. Ranking scoped to the selection's own tier and below, never above.
 
 The drill-down assertions target `_tools_matching` directly rather than
 through the UI. All four affordances (card overlay, pie caption, ranking bar,
@@ -268,3 +269,76 @@ def test_detailed_analysis_zero_state_renders_zeros_rather_than_collapsing():
     assert infos.count("No data for selected period.") == 2, \
         f"expected both panels to explain the gap, got {infos}"
     assert not at.get("plotly_chart"), "no chart should be drawn with no data"
+
+
+# ---- 4. ranking scope: own tier and below, never above ---------------------
+
+# The hierarchy the ranking selector is scoped against.
+HIERARCHY = ['Region', 'Country', 'Supplier', 'Plant', 'Tooling Type',
+             'Project', 'Part']
+
+# Level -> exactly what its Rank-by selector must offer. Global sits above
+# the whole hierarchy so it offers all of it; a root tab offers its own tier
+# and below (nothing is pinned yet, so ranking the tab's own tier is real);
+# selecting one entity pins that tier, so it starts one lower.
+EXPECTED_RANKING_DIMS = {
+    'global':       HIERARCHY,
+    'region_all':   HIERARCHY,
+    'country_all':  HIERARCHY[1:],
+    'supplier_all': HIERARCHY[2:],
+    'plant_all':    HIERARCHY[3:],
+    'type_all':     HIERARCHY[4:],
+    'project_all':  HIERARCHY[5:],
+    'part_all':     HIERARCHY[6:],
+    'region':       HIERARCHY[1:],
+    'country':      HIERARCHY[2:],
+    'supplier':     HIERARCHY[3:],
+    'plant':        HIERARCHY[4:],
+    'type':         HIERARCHY[5:],
+    'project':      HIERARCHY[6:],
+    'part':         [],
+}
+
+
+@pytest.mark.parametrize("level,expected", sorted(EXPECTED_RANKING_DIMS.items()))
+def test_ranking_offers_its_own_tier_and_below_only(level, expected):
+    assert views._ranking_dims(level) == expected
+
+
+@pytest.mark.parametrize("level", sorted(EXPECTED_RANKING_DIMS))
+def test_ranking_never_offers_a_tier_above_the_selection(level):
+    """The point of the scoping: a node has one parent per level above, so
+    ranking by a higher tier would draw a single bar labelled with the thing
+    you are already inside."""
+    dims = views._ranking_dims(level)
+    if not dims:
+        return
+    floor = HIERARCHY.index(dims[0])
+    assert dims == HIERARCHY[floor:], f"{level} ranking is not a contiguous tail"
+    above = set(HIERARCHY[:floor])
+    assert not (above & set(dims)), f"{level} ranks by a tier above it"
+
+
+def test_selecting_an_entity_drops_its_own_tier_from_the_ranking():
+    """A selected Country must not rank by Country, though the Country TAB
+    (where no single country is pinned) still must."""
+    for tab, sel, tier in [('country_all', 'country', 'Country'),
+                           ('supplier_all', 'supplier', 'Supplier'),
+                           ('plant_all', 'plant', 'Plant'),
+                           ('type_all', 'type', 'Tooling Type'),
+                           ('project_all', 'project', 'Project'),
+                           ('part_all', 'part', 'Part')]:
+        assert tier in views._ranking_dims(tab), f"{tab} should still rank by {tier}"
+        assert tier not in views._ranking_dims(sel), \
+            f"{sel} must not rank by its own pinned tier {tier}"
+
+
+def test_tool_is_never_a_ranking_dimension():
+    """Part is the lowest ranking tier; Tool is reached by a row click."""
+    for level in EXPECTED_RANKING_DIMS:
+        assert 'Tooling' not in views._ranking_dims(level)
+        assert 'Tool' not in views._ranking_dims(level)
+
+
+def test_a_selected_part_has_nothing_left_to_rank():
+    assert views._ranking_dims('part') == []

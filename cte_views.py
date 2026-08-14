@@ -113,10 +113,12 @@ def render_scope_overview(ctx):
     ui.section(f"Cycle Time Efficiency by {child_dim}", size="1.1rem")
     pie_click = ch.small_multiple_pies(ctx.scope, child_dim, ctx.tolerance_pct, ctx.keyns)
 
-    st.markdown("<br>", unsafe_allow_html=True)
-    ui.section("Saving Opportunity & Loss Ranking", size="1.1rem")
-    bar_click = ch.ranking_bars(ctx.scope, _ranking_dims(ctx.level),
-                                ctx.tolerance_pct, ctx.keyns)
+    bar_click = None
+    dims = _ranking_dims(ctx.level)
+    if dims:
+        st.markdown("<br>", unsafe_allow_html=True)
+        ui.section("Saving Opportunity & Loss Ranking", size="1.1rem")
+        bar_click = ch.ranking_bars(ctx.scope, dims, ctx.tolerance_pct, ctx.keyns)
     _handle_clicks(card, pie_click, child_dim, bar_click)
 
     # --- B. Trend ---
@@ -182,19 +184,42 @@ def render_scope_overview(ctx):
 RANKING_DIMS = ['Region', 'Country', 'Supplier', 'Plant',
                 'Tooling Type', 'Project', 'Part']
 
+# Which tier each level sits at in RANKING_DIMS. A page ranks by its own tier
+# and everything below it, never by a tier above: a node has exactly one
+# parent at each level above, so ranking a selected supplier by Region would
+# draw a single bar labelled with the region you are already inside.
+#
+# Selecting one entity pins that tier too, so those levels start one lower --
+# the difference between the Country TAB (all countries, ranking by Country
+# is meaningful) and one selected country (ranking by Country is a single
+# bar). Global sits above the whole hierarchy and so offers all of it.
+_RANKING_FLOOR = {
+    'global': 'Region',
+    # Root tabs: own tier and below.
+    'region_all': 'Region',      'country_all': 'Country',
+    'supplier_all': 'Supplier',  'plant_all': 'Plant',
+    'type_all': 'Tooling Type',  'project_all': 'Project',
+    'part_all': 'Part',
+    # A single entity selected: strictly below its own tier.
+    'region': 'Country',         'country': 'Supplier',
+    'supplier': 'Plant',         'plant': 'Tooling Type',
+    'type': 'Project',           'project': 'Part',
+    # Part is the lowest ranking tier -- Tool is not a ranking dimension, so
+    # a selected part has nothing left to rank by and renders no ranking.
+    'part': None,
+}
+
 
 def _ranking_dims(level):
-    """The ranking dimensions offered at a given level.
+    """The ranking dimensions offered at a given level, hierarchy-scoped.
 
-    Every dimension in RANKING_DIMS, minus any the current scope has already
-    pinned to a single value -- ranking by Region while drilled into one
-    region would render a one-bar chart.
+    Returns [] where there is nothing below the selection left to rank, in
+    which case the caller renders no ranking section at all.
     """
-    if level == 'region':
-        return [d for d in RANKING_DIMS if d != 'Region']
-    if level == 'country':
-        return [d for d in RANKING_DIMS if d not in ('Region', 'Country')]
-    return list(RANKING_DIMS)
+    floor = _RANKING_FLOOR.get(level, 'Region')
+    if floor is None:
+        return []
+    return RANKING_DIMS[RANKING_DIMS.index(floor):]
 
 
 def _tool_table(df, period_label, tolerance_pct, extra_cols=()):
@@ -240,13 +265,18 @@ def render_entity_tools(ctx):
                                 group_col=cfg['col'] or 'Tooling ID')
     st.markdown("<hr style='border-color:#2d3748;margin:1.5rem 0;'>", unsafe_allow_html=True)
 
-    pie_col, rank_col = st.columns([1, 2])
-    with pie_col:
-        ch.single_pie(ctx.scope, ctx.tolerance_pct, ctx.keyns,
-                      title=f"{ctx.value} — Fast / Within / Slow")
-    with rank_col:
-        ui.section("Saving Opportunity & Loss by Tool", size="1.1rem")
-        bar_click = ch.ranking_bars(ctx.scope, ['Tooling'], ctx.tolerance_pct, ctx.keyns)
+    # No Fast/Within/Slow pie here: the Detailed Analysis above already shows
+    # that exact split as its Efficiency Distribution donut, and rendering it
+    # twice on one page just made the reader check whether the two agreed.
+    #
+    # Ranking is scoped to the tiers below this entity (see _RANKING_FLOOR),
+    # so a supplier ranks its plants / tooling types / projects / parts
+    # rather than the tools directly beneath it.
+    bar_click = None
+    dims = _ranking_dims(ctx.level)
+    if dims:
+        ui.section("Saving Opportunity & Loss Ranking", size="1.1rem")
+        bar_click = ch.ranking_bars(ctx.scope, dims, ctx.tolerance_pct, ctx.keyns)
     _handle_clicks(card, None, None, bar_click)
 
     st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
@@ -467,12 +497,15 @@ def render_dimension_all(ctx):
         pie_click = ch.small_multiple_pies(ctx.scope, entity_col,
                                            ctx.tolerance_pct, ctx.keyns)
 
-    st.markdown("<br>", unsafe_allow_html=True)
-    # Same Rank-by selector as the scope pages, so every tab can rank by any
-    # dimension rather than only its own.
-    ui.section("Saving Opportunity & Loss Ranking", size="1.1rem")
-    bar_click = ch.ranking_bars(ctx.scope, _ranking_dims(ctx.level),
-                                ctx.tolerance_pct, ctx.keyns)
+    # Same Rank-by selector as the scope pages, scoped to this tab's own tier
+    # and below -- no entity is selected on a root tab, so its own tier still
+    # ranks meaningfully (the Country tab really does rank countries).
+    bar_click = None
+    dims = _ranking_dims(ctx.level)
+    if dims:
+        st.markdown("<br>", unsafe_allow_html=True)
+        ui.section("Saving Opportunity & Loss Ranking", size="1.1rem")
+        bar_click = ch.ranking_bars(ctx.scope, dims, ctx.tolerance_pct, ctx.keyns)
     _handle_clicks(card, pie_click, entity_col, bar_click)
 
     st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
