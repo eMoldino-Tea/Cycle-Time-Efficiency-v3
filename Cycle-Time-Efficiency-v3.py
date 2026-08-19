@@ -37,6 +37,23 @@ st.set_page_config(
 ui.inject_theme()
 
 # ==========================================================================
+# PASSWORD PROTECTION
+# ==========================================================================
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+if not st.session_state.authenticated:
+    st.markdown("# 🔐 Cycle Time Efficiency Dashboard")
+    password = st.text_input("Enter password:", type="password")
+    if password:
+        if password == st.secrets["password"]:
+            st.session_state.authenticated = True
+            st.rerun()
+        else:
+            st.error("❌ Incorrect password")
+    st.stop()
+
+# ==========================================================================
 # DATA
 # ==========================================================================
 base_df = core.load_base_data(version=11)

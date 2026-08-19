@@ -13,3 +13,6 @@ __pycache__/
 
 # Subagent-driven-development scratch (briefs, reports, review packages)
 .superpowers/
+
+# Streamlit secrets (passwords, API keys) — local only, never pushed
+.streamlit/secrets.toml
