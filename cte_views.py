@@ -103,11 +103,11 @@ def render_scope_overview(ctx):
     # Selected-item summary, above the by-child breakdown. Roots have nothing
     # selected, so it only appears once the reader has drilled into something.
     if ctx.value is not None:
-        st.markdown("<hr style='border-color:#2d3748;margin:1.5rem 0;'>", unsafe_allow_html=True)
+        ui.hr("1.5rem 0")
         ch.render_detailed_analysis(ctx.scope, ctx.value, ctx.keyns,
                                     ctx.period_label, ctx.tolerance_pct,
                                     group_col=cfg['col'] or 'Tooling ID')
-        st.markdown("<hr style='border-color:#2d3748;margin:1.5rem 0;'>", unsafe_allow_html=True)
+        ui.hr("1.5rem 0")
 
     st.markdown("<br>", unsafe_allow_html=True)
     ui.section(f"Cycle Time Efficiency by {child_dim}", size="1.1rem")
@@ -122,7 +122,7 @@ def render_scope_overview(ctx):
     _handle_clicks(card, pie_click, child_dim, bar_click)
 
     # --- B. Trend ---
-    st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
+    ui.hr()
     ch.render_trend_block(ctx.trend, cfg['trend_dim'], ctx.keyns)
 
     # --- Finding 1: child geography detail table -----------------------------
@@ -135,7 +135,7 @@ def render_scope_overview(ctx):
     if child_dim != 'Supplier':
         child_level = cfg['child']
         child_label = nav.LEVELS[child_level]['label']
-        st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
+        ui.hr()
         ui.section(f"{child_label} Detail")
         st.caption(f"Select a row to open that {child_label.lower()}.")
         geo = core.entity_detail_table(ctx.scope, child_dim,
@@ -157,7 +157,7 @@ def render_scope_overview(ctx):
             _table_drill(gview, child_dim, child_level, f"{child_level}_{ctx.keyns}")
 
     # --- Supplier detail table (click a supplier to drill in) ---
-    st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
+    ui.hr()
     ui.section("Supplier Detail")
     st.caption("Select a row to open that supplier's tools.")
     sup = core.entity_detail_table(ctx.scope, 'Supplier', extra_cols=('Country',),
@@ -259,11 +259,11 @@ def render_entity_tools(ctx):
     card = ui.summary_tiles(core.scope_summary(ctx.scope, ctx.tolerance_pct),
                             "Tools", keyns=ctx.keyns)
 
-    st.markdown("<hr style='border-color:#2d3748;margin:1.5rem 0;'>", unsafe_allow_html=True)
+    ui.hr("1.5rem 0")
     ch.render_detailed_analysis(ctx.scope, ctx.value, ctx.keyns,
                                 ctx.period_label, ctx.tolerance_pct,
                                 group_col=cfg['col'] or 'Tooling ID')
-    st.markdown("<hr style='border-color:#2d3748;margin:1.5rem 0;'>", unsafe_allow_html=True)
+    ui.hr("1.5rem 0")
 
     # No Fast/Within/Slow pie here: the Detailed Analysis above already shows
     # that exact split as its Efficiency Distribution donut, and rendering it
@@ -279,10 +279,10 @@ def render_entity_tools(ctx):
         bar_click = ch.ranking_bars(ctx.scope, dims, ctx.tolerance_pct, ctx.keyns)
     _handle_clicks(card, None, None, bar_click)
 
-    st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
+    ui.hr()
     ch.render_trend_block(ctx.trend, cfg['trend_dim'], ctx.keyns)
 
-    st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
+    ui.hr()
     # Follow the registry: a Supplier's child is now Plant, so a supplier page
     # lists its plants and a plant page lists its tools. Tools stay reachable
     # from a supplier in one click via the summary cards and ranking bars.
@@ -444,7 +444,7 @@ def render_tool(ctx):
     m.metric("Saving Opportunity", f"${row['Financial Gain']:,.0f}")
     n.metric("Loss", f"${row['Financial Loss']:,.0f}")
 
-    st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
+    ui.hr()
     # Terminal tier: same summary as every other tier, but no
     # breakdown-by-lower-tier, ranking or child-distribution charts, because
     # there is no tier below a tool.
@@ -452,7 +452,7 @@ def render_tool(ctx):
                                 ctx.period_label, ctx.tolerance_pct,
                                 group_col='Tooling ID')
 
-    st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
+    ui.hr()
     ch.render_trend_block(ctx.trend, 'Tooling', ctx.keyns)
 
 
@@ -508,10 +508,10 @@ def render_dimension_all(ctx):
         bar_click = ch.ranking_bars(ctx.scope, dims, ctx.tolerance_pct, ctx.keyns)
     _handle_clicks(card, pie_click, entity_col, bar_click)
 
-    st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
+    ui.hr()
     ch.render_trend_block(ctx.trend, cfg['trend_dim'], ctx.keyns)
 
-    st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
+    ui.hr()
     ui.section(f"{entity_col} Detail")
     st.caption(f"Select a row to open that {entity_col.lower()}.")
     if entity_col == 'Part':
@@ -539,12 +539,12 @@ def render_part(ctx):
     names = sorted(ctx.scope['Part Name'].dropna().unique().tolist())
     ui.entity_badge("Part:", f"{ctx.value} — {', '.join(names)}" if names else str(ctx.value))
 
-    st.markdown("<hr style='border-color:#2d3748;margin:1.5rem 0;'>", unsafe_allow_html=True)
+    ui.hr("1.5rem 0")
     # Part tier aggregates across every tool that makes this part -- no single
     # tool needs selecting for the summary to be meaningful.
     ch.render_detailed_analysis(ctx.scope, ctx.value, ctx.keyns,
                                 ctx.period_label, ctx.tolerance_pct, group_col='Part')
-    st.markdown("<hr style='border-color:#2d3748;margin:1.5rem 0;'>", unsafe_allow_html=True)
+    ui.hr("1.5rem 0")
 
     row = core.compute_comprehensive_row(ctx.value, ctx.scope, 'Part', ctx.period_label,
                                          tolerance_pct=ctx.tolerance_pct)
@@ -565,7 +565,7 @@ def render_part(ctx):
     f.metric("Within Shots", f"{row['Within Shots (%)']:.1f}%")
     g.metric("Slow Shots", f"{row['Slow Shots (%)']:.1f}%")
 
-    st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
+    ui.hr()
     ch.render_trend_block(ctx.trend, 'Tooling', ctx.keyns)
 
 

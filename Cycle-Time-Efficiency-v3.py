@@ -197,6 +197,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+_t = ui.get_theme()
 _active = {k: v for k, v in master_selections.items() if v}
 # Finding 3: `v` is the operator's selected values for a master-filter
 # dimension (Supplier, Tooling, Part, Tooling Type, ...) -- real entity names
@@ -204,22 +205,22 @@ _active = {k: v for k, v in master_selections.items() if v}
 # before landing in this unsafe_allow_html markdown block. `k` is always one
 # of our own static MASTER_FILTER_COLS literals, not data, so it is left as-is.
 _chip_html = "".join(
-    f'<span style="background:#1e293b;border:1px solid #38bdf8;border-radius:6px;'
-    f'padding:3px 12px;font-size:.85rem;color:#e2e8f0;white-space:nowrap;">'
+    f'<span style="background:{_t["chip_bg"]};border:1px solid {_t["chip_border"]};border-radius:6px;'
+    f'padding:3px 12px;font-size:.85rem;color:{_t["soft_text"]};white-space:nowrap;">'
     f'<b>{k}:</b> {", ".join(ui.esc(item) for item in v)}</span> ' for k, v in _active.items())
 # Built outside the f-string below: Python 3.9 forbids backslashes (and here,
 # nested quote escaping) inside f-string expressions.
-_no_filters = '<span style="color:#475569;font-size:.85rem;">None applied</span>'
+_no_filters = f'<span style="color:{_t["note_text"]};font-size:.85rem;">None applied</span>'
 _filters_row = _chip_html if _chip_html else _no_filters
 st.markdown(
-    f'<div style="background:#1a1d26;border:1px solid #2d3748;border-radius:10px;'
+    f'<div style="background:{_t["card_bg"]};border:1px solid {_t["border"]};border-radius:10px;'
     f'padding:12px 20px;margin-bottom:18px;">'
     f'<div style="display:flex;flex-wrap:wrap;gap:24px;margin-bottom:6px;">'
-    f'<span style="color:#94a3b8;font-size:.88rem;"><b>Date Range:</b> {period_label}</span>'
-    f'<span style="color:#94a3b8;font-size:.88rem;"><b>Financial Parameters:</b> '
+    f'<span style="color:{_t["muted_text"]};font-size:.88rem;"><b>Date Range:</b> {period_label}</span>'
+    f'<span style="color:{_t["muted_text"]};font-size:.88rem;"><b>Financial Parameters:</b> '
     f'Labor ${labor_rate:.2f}/hr &nbsp;|&nbsp; Machine ${machine_rate:.2f}/hr</span></div>'
     f'<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">'
-    f'<span style="color:#64748b;font-size:.88rem;margin-right:8px;">Filters:</span>'
+    f'<span style="color:{_t["faint_text"]};font-size:.88rem;margin-right:8px;">Filters:</span>'
     f'{_filters_row}'
     f'</div></div>',
     unsafe_allow_html=True,
@@ -293,5 +294,5 @@ if ctx.scope.empty:
 views.RENDERERS[level](ctx)
 
 st.sidebar.markdown("---")
-st.sidebar.markdown('<div style="color:#475569; font-size:.8rem; text-align:center;">v3.0.0</div>',
+st.sidebar.markdown(f'<div style="color:{ui.get_theme()["note_text"]}; font-size:.8rem; text-align:center;">v3.0.0</div>',
                     unsafe_allow_html=True)

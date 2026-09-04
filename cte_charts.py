@@ -44,7 +44,7 @@ def render_trend_block(trend_scope_df, trend_dim, keyns):
     period_word = "Month" if freq == 'M' else "Quarter"
 
     _render_deviation_graph(trend_scope_df, trend_dim, freq, period_word, keyns)
-    st.markdown("<hr style='border-color:#2d3748;margin:1.75rem 0;'>", unsafe_allow_html=True)
+    ui.hr()
     _render_split_graph(trend_scope_df, freq, period_word, keyns)
 
 
@@ -93,24 +93,30 @@ def _render_deviation_graph(df, dim, freq, period_word, keyns):
     dev = dev.copy()
     dev['label'] = dev['bucket'].apply(lambda x: ui.bucket_label(x, freq))
 
+    ct = ui.get_theme()
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=dev['label'], y=dev['Weighted_Deviation'],
         mode="lines+markers", name="ACT-Weighted Deviation",
-        line=dict(color=ui.WITHIN_COLOR, width=2.5), marker=dict(size=6),
+        # A thin line trace (unlike a filled bar or pie slice) relies on
+        # color contrast against the canvas alone to stay visible, so this
+        # uses the theme's text-safe variant rather than the raw fill token
+        # -- WITHIN_COLOR's light pastel blue all but disappears on a white
+        # light-mode canvas.
+        line=dict(color=ct["within_text"], width=2.5), marker=dict(size=6),
         hovertemplate="<b>%{x}</b><br>Deviation: %{y:.2f}s<extra></extra>",
     ))
     fig.add_hline(y=0, line_dash="dash", line_color=ui.REFERENCE_LINE_COLOR,
                   annotation_text="On Target (ACT)", annotation_position="top left",
-                  annotation_font_color="#94a3b8")
+                  annotation_font_color=ct["chart_tick"])
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         height=360, margin=dict(l=10, r=20, t=20, b=10),
-        xaxis=dict(type='category', showgrid=False, tickfont=dict(color="#94a3b8")),
-        yaxis=dict(showgrid=True, gridcolor="#334155",
-                   title="ACT-Weighted Deviation (seconds)", tickfont=dict(color="#94a3b8")),
+        xaxis=dict(type='category', showgrid=False, tickfont=dict(color=ct["chart_tick"])),
+        yaxis=dict(showgrid=True, gridcolor=ct["chart_grid"],
+                   title="ACT-Weighted Deviation (seconds)", tickfont=dict(color=ct["chart_tick"])),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        font=dict(color="#e2e8f0"),
+        font=dict(color=ct["chart_font"]),
         hoverlabel=HOVERLABEL_LEFT,
     )
     st.plotly_chart(fig, use_container_width=True, key=f"tr1_{keyns}")
@@ -138,8 +144,8 @@ def _render_deviation_graph(df, dim, freq, period_word, keyns):
             help="Average seconds per shot vs the approved cycle time (ACT-weighted). "
                  "Negative = running faster than approved; positive = slower."),
         'Change vs Previous Period': st.column_config.TextColumn(
-            help="Change in the deviation vs the prior period. ↓ (green) = deviation "
-                 "shrank, moving toward the approved cycle time; ↑ (red) = it grew."),
+            help="Change in the deviation vs the prior period. ↓ = deviation shrank, "
+                 "moving toward the approved cycle time; ↑ = it grew."),
     })
 
 
@@ -154,12 +160,13 @@ def _render_split_graph(df, freq, period_word, keyns):
         return
     summ = core.ct_split_summary(df, freq)
     bucket_word = "active months" if freq == 'M' else "active quarters"
+    t = ui.get_theme()
     st.markdown(
         f'<div class="v3-statline">'
         f'<b>Cycle Time Efficiency {summ["ct_compliance"]:.0f}%</b> &nbsp;·&nbsp; '
         f'<span style="color:{ui.FAST_COLOR};">Fast Shots {summ["pct_fast"]:.0f}%</span> &nbsp;·&nbsp; '
-        f'<span style="color:{ui.WITHIN_COLOR};">Within Shots {summ["pct_within"]:.0f}%</span> &nbsp;·&nbsp; '
-        f'<span style="color:{ui.SLOW_COLOR};">Slow Shots {summ["pct_slow"]:.0f}%</span> &nbsp;·&nbsp; '
+        f'<span style="color:{t["within_text"]};">Within Shots {summ["pct_within"]:.0f}%</span> &nbsp;·&nbsp; '
+        f'<span style="color:{t["slow_text"]};">Slow Shots {summ["pct_slow"]:.0f}%</span> &nbsp;·&nbsp; '
         f'{summ["total_shots"]:,} shots &nbsp;·&nbsp; '
         f'{summ["active_buckets"]} {bucket_word}</div>',
         unsafe_allow_html=True)
@@ -172,15 +179,21 @@ def _render_split_graph(df, freq, period_word, keyns):
         x=s['label'], y=s['Total Shots'], name="Shots",
         marker_color=ui.VOLUME_COLOR, yaxis="y",
         text=s['Total Shots'], texttemplate="%{text:.2s}", textposition="outside",
-        textfont=dict(color="#94a3b8", size=10), cliponaxis=False,
+        textfont=dict(color=t["chart_tick"], size=10), cliponaxis=False,
         hovertemplate="<b>%{x}</b><br>Shots: %{y:,}<extra></extra>",
     ))
     # Data labels are staggered per series (top / right / bottom) so months with
     # close values never collide; exact figures are always in the unified hover.
+    # Faster keeps FAST_COLOR (already validated as legible text on both
+    # themes); Within/Slower use the theme's text-safe variants -- these are
+    # thin lines drawn straight on the canvas, not filled shapes, so (like
+    # the deviation trend line above) they need real contrast against
+    # whatever background is behind them, which a raw WITHIN_COLOR/SLOW_COLOR
+    # doesn't have on a light canvas.
     for col, name, color, symbol, textpos in [
-        ('Fast Shots (%)',   'Faster',  ui.FAST_COLOR,   'circle',        'top center'),
-        ('Within Shots (%)', 'Within',  ui.WITHIN_COLOR, 'square',        'middle right'),
-        ('Slow Shots (%)',   'Slower',  ui.SLOW_COLOR,   'triangle-up',   'bottom center'),
+        ('Fast Shots (%)',   'Faster',  ui.FAST_COLOR,      'circle',        'top center'),
+        ('Within Shots (%)', 'Within',  t["within_text"],   'square',        'middle right'),
+        ('Slow Shots (%)',   'Slower',  t["slow_text"],     'triangle-up',   'bottom center'),
     ]:
         fig.add_trace(go.Scatter(
             x=s['label'], y=s[col], name=name, yaxis="y2",
@@ -194,13 +207,13 @@ def _render_split_graph(df, freq, period_word, keyns):
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         height=440, margin=dict(l=10, r=20, t=30, b=10), hovermode="x unified",
         barmode="overlay",
-        xaxis=dict(type='category', showgrid=False, tickfont=dict(color="#94a3b8")),
-        yaxis=dict(title="Shots", showgrid=False, tickfont=dict(color="#94a3b8")),
+        xaxis=dict(type='category', showgrid=False, tickfont=dict(color=t["chart_tick"])),
+        yaxis=dict(title="Shots", showgrid=False, tickfont=dict(color=t["chart_tick"])),
         yaxis2=dict(title="Share of shots (%)", overlaying="y", side="right",
-                    range=[0, 100], showgrid=True, gridcolor="#334155",
-                    tickfont=dict(color="#94a3b8")),
+                    range=[0, 100], showgrid=True, gridcolor=t["chart_grid"],
+                    tickfont=dict(color=t["chart_tick"])),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        font=dict(color="#e2e8f0"),
+        font=dict(color=t["chart_font"]),
         hoverlabel=HOVERLABEL_LEFT,
     )
     st.plotly_chart(fig, use_container_width=True, key=f"tr2_{keyns}")
@@ -221,10 +234,21 @@ def _pie_figure(values, height=250):
     # single tool reads "1 tool" instead of "1 tools".
     counts = [f"{int(v):,} tool" if int(v) == 1 else f"{int(v):,} tools"
               for v in values]
+    t = ui.get_theme()
     fig = go.Figure(go.Pie(
         labels=['Fast', 'Within', 'Slow'], values=values, hole=0.55,
+        # Slice fills are constant across themes (see the FAST/WITHIN/SLOW
+        # tokens' own comment) -- a filled shape's own text and its border
+        # against neighboring slices are what need to react to the theme,
+        # not the fill itself. The border also matches the page background
+        # (chart_outline) so each pie still reads as "cut out" of the page,
+        # the same illusion dark mode gets from a near-black border on a
+        # near-black page.
         marker=dict(colors=[ui.FAST_COLOR, ui.WITHIN_COLOR, ui.SLOW_COLOR],
-                    line=dict(color='#0f1117', width=2)),
+                    line=dict(color=t["chart_outline"], width=2)),
+        # Slice label text stays near-black regardless of theme: its
+        # contrast target is the slice FILL color underneath it (verified
+        # against all three fills), which doesn't change between themes.
         textinfo='percent', textfont=dict(color='#0f1117', size=12, weight="bold"),
         customdata=counts,
         hovertemplate=("<b>%{label}</b><br>Value: %{customdata}"
@@ -233,7 +257,7 @@ def _pie_figure(values, height=250):
     ))
     fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                       height=height, margin=dict(l=6, r=6, t=6, b=6), showlegend=False,
-                      font=dict(color="#e2e8f0"), hoverlabel=HOVERLABEL_LEFT)
+                      font=dict(color=t["chart_font"]), hoverlabel=HOVERLABEL_LEFT)
     return fig
 
 
@@ -257,7 +281,7 @@ def small_multiple_pies(df, dim, tolerance_pct, keyns, max_pies=8):
             s = core.fast_within_slow_summary(sub, 'Tooling', tolerance_pct)
             # `ent` is a real entity value (region / country / supplier
             # name, ...) that can originate from an operator-supplied CSV.
-            st.markdown(f'<div style="text-align:center;color:#e2e8f0;font-size:.92rem;'
+            st.markdown(f'<div style="text-align:center;color:{ui.get_theme()["soft_text"]};font-size:.92rem;'
                         f'font-weight:600;margin-bottom:2px;">{ui.esc(ent)}</div>',
                         unsafe_allow_html=True)
             st.plotly_chart(_pie_figure([s['fast'], s['within'], s['slow']]),
@@ -283,7 +307,7 @@ def single_pie(df, tolerance_pct, keyns, title="Cycle Time Efficiency Split"):
         return
     # `title` frequently embeds the caller's ctx.value (e.g. a supplier or
     # tooling-type name) -- escape it; the default literal escapes to itself.
-    st.markdown(f'<div style="text-align:center;color:#e2e8f0;font-size:1.05rem;'
+    st.markdown(f'<div style="text-align:center;color:{ui.get_theme()["soft_text"]};font-size:1.05rem;'
                 f'font-weight:600;margin-bottom:4px;">{ui.esc(title)}</div>', unsafe_allow_html=True)
     st.plotly_chart(_pie_figure([s['fast'], s['within'], s['slow']], height=320),
                     use_container_width=True, key=f"pie1_{keyns}")
@@ -312,6 +336,7 @@ def ranking_bars(df, dims, tolerance_pct, keyns, top_n=10):
         st.info("No data available for this ranking.")
         return None
     clicked = None
+    t = ui.get_theme()
 
     left, right = st.columns(2)
     for col, data, metric, color, title in [
@@ -319,7 +344,7 @@ def ranking_bars(df, dims, tolerance_pct, keyns, top_n=10):
         (right, loss, 'Financial Lost', ui.SLOW_COLOR, f"Top {pick}s — Loss"),
     ]:
         with col:
-            st.markdown(f'<div style="color:#e2e8f0;font-size:1rem;font-weight:600;'
+            st.markdown(f'<div style="color:{t["soft_text"]};font-size:1rem;font-weight:600;'
                         f'margin-bottom:4px;">{ui.esc(title)}</div>', unsafe_allow_html=True)
             d = data.sort_values(metric)
             fig = go.Figure(go.Bar(
@@ -331,10 +356,10 @@ def ranking_bars(df, dims, tolerance_pct, keyns, top_n=10):
             fig.update_layout(
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                 height=max(260, 34 * len(d)), margin=dict(l=10, r=60, t=10, b=10),
-                xaxis=dict(showgrid=True, gridcolor="#334155", tickfont=dict(color="#94a3b8"),
+                xaxis=dict(showgrid=True, gridcolor=t["chart_grid"], tickfont=dict(color=t["chart_tick"]),
                            title="US$"),
-                yaxis=dict(type='category', showgrid=False, tickfont=dict(color="#e2e8f0")),
-                font=dict(color="#e2e8f0"), showlegend=False,
+                yaxis=dict(type='category', showgrid=False, tickfont=dict(color=t["chart_font"])),
+                font=dict(color=t["chart_font"]), showlegend=False,
                 hoverlabel=HOVERLABEL_LEFT,
             )
             sel = st.plotly_chart(fig, use_container_width=True,
@@ -413,7 +438,7 @@ def render_detailed_analysis(scope, label, keyns, period_label, tolerance_pct,
                         f'<div class="v3-kpi-value">{ui.esc(kvalue)}</div>',
                         unsafe_allow_html=True)
 
-    st.markdown("<hr style='border-color:#2d3748;margin:1.5rem 0;'>", unsafe_allow_html=True)
+    ui.hr("1.5rem 0")
 
     left, right = st.columns([1.4, 1])
     with left:
@@ -422,10 +447,14 @@ def render_detailed_analysis(scope, label, keyns, period_label, tolerance_pct,
         if trend.empty:
             st.info("No data for selected period.")
         else:
+            ct = ui.get_theme()
             lfig = go.Figure()
             lfig.add_trace(go.Scatter(
                 x=trend['bucket'], y=trend['Efficiency_%'],
-                mode="lines+markers", line=dict(color=ui.WITHIN_COLOR, width=2.5),
+                # Text-safe variant, same reasoning as the other trend lines:
+                # a thin line needs real contrast against the canvas, which
+                # raw WITHIN_COLOR only has on a dark background.
+                mode="lines+markers", line=dict(color=ct["within_text"], width=2.5),
                 marker=dict(size=6),
                 hovertemplate="<b>%{x|%b %d, %Y}</b><br>Efficiency: %{y:.2f}%<extra></extra>",
             ))
@@ -433,10 +462,10 @@ def render_detailed_analysis(scope, label, keyns, period_label, tolerance_pct,
             lfig.update_layout(
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                 height=380, margin=dict(l=10, r=20, t=20, b=10),
-                xaxis=dict(showgrid=False, tickfont=dict(color="#94a3b8"), title="Date"),
-                yaxis=dict(showgrid=True, gridcolor="#334155", title="Efficiency_%",
-                           tickfont=dict(color="#94a3b8")),
-                font=dict(color="#e2e8f0"), hoverlabel=HOVERLABEL_LEFT,
+                xaxis=dict(showgrid=False, tickfont=dict(color=ct["chart_tick"]), title="Date"),
+                yaxis=dict(showgrid=True, gridcolor=ct["chart_grid"], title="Efficiency_%",
+                           tickfont=dict(color=ct["chart_tick"])),
+                font=dict(color=ct["chart_font"]), hoverlabel=HOVERLABEL_LEFT,
             )
             st.plotly_chart(lfig, use_container_width=True, key=f"da_trend_{keyns}")
     with right:
@@ -444,13 +473,18 @@ def render_detailed_analysis(scope, label, keyns, period_label, tolerance_pct,
         if empty:
             st.info("No data for selected period.")
         else:
+            ct = ui.get_theme()
             vals = [row.get('Fast Shots (%)', 0) or 0,
                     row.get('Within Shots (%)', 0) or 0,
                     row.get('Slow Shots (%)', 0) or 0]
             rpie = go.Figure(go.Pie(
                 labels=['Fast', 'Within', 'Slow'], values=vals, hole=0.55,
+                # Fills constant across themes; border matches the page
+                # background for the same "cut out" reasoning as the other
+                # pies. Slice label text stays near-black -- contrast target
+                # is the fill, not the page (see _pie_figure).
                 marker=dict(colors=[ui.FAST_COLOR, ui.WITHIN_COLOR, ui.SLOW_COLOR],
-                            line=dict(color='#0f1117', width=2)),
+                            line=dict(color=ct["chart_outline"], width=2)),
                 textinfo='percent',
                 textfont=dict(color='#0f1117', size=13, weight="bold"),
                 hovertemplate="<b>%{label}</b><br>Percentage: %{value:.1f}%<extra></extra>",
@@ -460,7 +494,7 @@ def render_detailed_analysis(scope, label, keyns, period_label, tolerance_pct,
                 height=380, margin=dict(l=10, r=10, t=10, b=10), showlegend=True,
                 legend=dict(orientation="v", yanchor="middle", y=0.5,
                             xanchor="left", x=1.02,
-                            font=dict(color="#e2e8f0", size=12)),
-                font=dict(color="#e2e8f0"), hoverlabel=HOVERLABEL_LEFT,
+                            font=dict(color=ct["chart_font"], size=12)),
+                font=dict(color=ct["chart_font"]), hoverlabel=HOVERLABEL_LEFT,
             )
             st.plotly_chart(rpie, use_container_width=True, key=f"da_pie_{keyns}")
