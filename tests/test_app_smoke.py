@@ -24,6 +24,7 @@ sys.path.insert(0, ROOT)
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
 import cte_nav as nav  # noqa: E402
+import cte_ui as ui  # noqa: E402
 
 APP = os.path.join(ROOT, "Cycle-Time-Efficiency-v3.py")
 
@@ -522,3 +523,40 @@ def test_a_forward_crumb_appears_after_navigating_back():
     fwd[0].click().run()
     assert not at.exception
     assert at.session_state[nav._STACK_KEY] == [("global", None), ("region", "APAC")]
+
+
+def _theme_radio(at):
+    return [r for r in at.radio if r.key == "v3_theme_radio"][0]
+
+
+def test_theme_toggle_appears_in_sidebar_defaulting_to_auto():
+    at = run_at(STACKS["global"])
+    radio = _theme_radio(at)
+    assert list(radio.options) == ["Auto", "Dark", "Light"]
+    assert radio.value == "Auto"
+
+
+def test_picking_light_in_the_toggle_actually_changes_the_rendered_css():
+    """End-to-end: the widget a reader clicks must reach get_theme() and
+    change what inject_theme() emits on the very next run, not just update
+    some inert session_state key."""
+    at = run_at(STACKS["global"])
+    before = [m.value for m in at.markdown if ".stApp {" in m.value][0]
+    assert ui._LIGHT_THEME["page_bg"] not in before
+
+    _theme_radio(at).set_value("Light").run()
+    assert not at.exception
+    assert at.session_state[ui._THEME_OVERRIDE_KEY] == "light"
+    after = [m.value for m in at.markdown if ".stApp {" in m.value][0]
+    assert ui._LIGHT_THEME["page_bg"] in after
+    assert ui._DARK_THEME["page_bg"] not in after
+
+
+def test_picking_auto_after_light_clears_the_override():
+    at = run_at(STACKS["global"])
+    _theme_radio(at).set_value("Light").run()
+    assert at.session_state[ui._THEME_OVERRIDE_KEY] == "light"
+
+    _theme_radio(at).set_value("Auto").run()
+    assert not at.exception
+    assert at.session_state[ui._THEME_OVERRIDE_KEY] == "auto"

@@ -35,6 +35,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 ui.inject_theme()
+ui.render_theme_toggle()
 
 # ==========================================================================
 # PASSWORD PROTECTION

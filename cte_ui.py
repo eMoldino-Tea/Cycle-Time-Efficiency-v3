@@ -90,22 +90,61 @@ _LIGHT_THEME = {
 }
 
 
-def get_theme():
-    """The active light/dark palette dict, following Streamlit's own theme
-    setting (its Settings menu, which itself can follow the OS) rather than
-    a separate switch of this app's own.
+_THEME_OVERRIDE_KEY = "v3_theme_override"
 
-    st.context.theme.type reflects Streamlit's underlying theme regardless
-    of this app's own CSS overrides below, so detection isn't circular. It
-    can be None briefly -- on a session's first script run, or mid-toggle
-    right after the user changes it (see Streamlit issue #11920) -- in which
-    case this defaults to dark, this app's original and most-tested design.
+
+def get_theme():
+    """The active light/dark palette dict.
+
+    Order of precedence:
+      1. An explicit choice from this app's own sidebar toggle (render_
+         theme_toggle), stored in session_state -- "auto" means no override.
+      2. Otherwise, Streamlit's own theme setting (its Settings menu, which
+         itself can follow the OS): st.context.theme.type reflects that
+         regardless of this app's own CSS overrides below, so detection
+         isn't circular.
+
+    st.context.theme.type can be None briefly -- on a session's first
+    script run, or mid-toggle right after the user changes it (see
+    Streamlit issue #11920) -- in which case this defaults to dark, this
+    app's original and most-tested design.
+
+    Note this only ever changes colors THIS APP injects itself (page
+    background, cards, text, every chart). Streamlit has no documented API
+    to force its own native widget chrome (slider tracks, the native
+    dataframe grid, scrollbars) to a specific theme at runtime -- those
+    keep following the browser's real theme regardless of what's picked
+    here, and can look mismatched if the two disagree.
     """
+    override = st.session_state.get(_THEME_OVERRIDE_KEY, "auto")
+    if override in ("light", "dark"):
+        return _LIGHT_THEME if override == "light" else _DARK_THEME
     try:
         mode = st.context.theme.type
     except Exception:
         mode = None
     return _LIGHT_THEME if mode == "light" else _DARK_THEME
+
+
+def render_theme_toggle():
+    """Sidebar Light/Dark/Auto control, overriding get_theme()'s default
+    of following Streamlit's own (hard-to-reach, since this app hides
+    Streamlit's own menu -- see inject_theme's #MainMenu rule) theme
+    setting. "Auto" clears the override and falls back to that detection.
+    """
+    labels = ["Auto", "Dark", "Light"]
+    values = ["auto", "dark", "light"]
+    current = st.session_state.get(_THEME_OVERRIDE_KEY, "auto")
+    st.sidebar.markdown("### Appearance")
+    choice = st.sidebar.radio(
+        "Theme", labels, index=values.index(current), horizontal=True,
+        key="v3_theme_radio", label_visibility="collapsed",
+        help="Auto follows your browser/OS setting.",
+    )
+    new_value = values[labels.index(choice)]
+    if new_value != current:
+        st.session_state[_THEME_OVERRIDE_KEY] = new_value
+        st.rerun()
 
 
 def esc(value):
@@ -183,6 +222,27 @@ _THEME_CSS_TEMPLATE = string.Template("""
 #MainMenu {visibility:hidden;} footer {visibility:hidden;}
 header {background-color:transparent !important;}
 .block-container {padding-top:2rem !important; padding-bottom:2rem !important; max-width:1600px;}
+/* The sidebar is Streamlit's own native chrome, styled by ITS OWN detected
+   theme -- untouched, it keeps following the real browser/OS preference
+   even after the sidebar toggle above (render_theme_toggle) overrides
+   get_theme() for everything else, producing a literal split-screen (a
+   light main area next to a still-dark native sidebar) whenever the
+   reader's manual choice disagrees with their actual browser theme. */
+[data-testid="stSidebar"] { background-color:${page_bg} !important; }
+[data-testid="stSidebar"] * { color:${page_text}; }
+/* Number/text input boxes (Tolerance, Financial Parameters, High-Runner
+   Filter, Custom Range dates) paint their own chrome via BaseWeb's
+   data-baseweb attribute rather than inheriting the sidebar's background
+   above, so forcing their TEXT to page_text without also repainting this
+   would put dark-on-dark (or light-on-light) text straight into the
+   input -- illegible, not just mistinted. data-baseweb is Streamlit's own
+   stable hook for this, unlike its generated one-off class names. */
+[data-testid="stSidebar"] [data-baseweb="input"],
+[data-testid="stSidebar"] [data-baseweb="base-input"],
+[data-testid="stSidebar"] [data-testid="stNumberInputStepDown"],
+[data-testid="stSidebar"] [data-testid="stNumberInputStepUp"] {
+  background-color:${card_bg} !important; border-color:${border} !important;
+}
 
 .dash-header {font-size:1.85rem; font-weight:700; color:${page_text}; margin-bottom:.25rem; letter-spacing:.5px;}
 .dash-sub {color:${muted_text}; font-size:.95rem; margin-bottom:1.5rem;}
