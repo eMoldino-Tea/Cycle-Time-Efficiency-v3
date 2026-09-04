@@ -14,8 +14,17 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-GREEN, YELLOW, RED, GREY = "#5cb85c", "#eab308", "#d9534f", "#94a3b8"
-STATUS_COLORS = {"Within": GREEN, "Slow": YELLOW, "Fast": RED}
+# Cycle Time Efficiency color tokens, per the MMS 2.0 design system's
+# Cycle Time Efficiency application row. Fast is a warm red-toned "quality-
+# risk flagged" token, not green: running faster than the Approved Cycle
+# Time (ACT) can mean under-cured or otherwise out-of-spec parts, so the
+# system deliberately does not treat "fast" as simply "good".
+FAST_COLOR = "#B04A5E"            # Fast (Gain) -- quality-risk flagged
+WITHIN_COLOR = "#5CA5FF"          # Within (Neutral) -- on-target / normal operation
+SLOW_COLOR = "#F8A425"            # Slow (Loss) -- caution indicator
+REFERENCE_LINE_COLOR = "#145741"  # Approved Cycle Time (ACT) baseline / target line
+GREY = "#94a3b8"
+STATUS_COLORS = {"Within": WITHIN_COLOR, "Slow": SLOW_COLOR, "Fast": FAST_COLOR}
 
 
 def esc(value):
@@ -443,11 +452,11 @@ def summary_tiles(summary, entity_noun="Tools", keyns=None):
 
     tiles = [
         ("Total " + entity_noun, f"{summary['total']:,}", "#ffffff", ""),
-        (f"Fast {entity_noun} (Gain)", f"{summary['fast']:,}", RED, _pct(summary['pct_fast'])),
-        (f"Within {entity_noun} (Neutral)", f"{summary['within']:,}", GREEN, _pct(summary['pct_within'])),
-        (f"Slow {entity_noun} (Loss)", f"{summary['slow']:,}", YELLOW, _pct(summary['pct_slow'])),
-        ("Saving Opportunity", f"${summary['saving_opportunity']:,.0f}", GREEN, "from fast shots"),
-        ("Loss", f"${summary['loss']:,.0f}", YELLOW, "from slow shots"),
+        (f"Fast {entity_noun} (Gain)", f"{summary['fast']:,}", FAST_COLOR, _pct(summary['pct_fast'])),
+        (f"Within {entity_noun} (Neutral)", f"{summary['within']:,}", WITHIN_COLOR, _pct(summary['pct_within'])),
+        (f"Slow {entity_noun} (Loss)", f"{summary['slow']:,}", SLOW_COLOR, _pct(summary['pct_slow'])),
+        ("Saving Opportunity", f"${summary['saving_opportunity']:,.0f}", FAST_COLOR, "from fast shots"),
+        ("Loss", f"${summary['loss']:,.0f}", SLOW_COLOR, "from slow shots"),
     ]
     # `keyns` opts the row into click-to-drill: each card gets a transparent
     # button laid over it (see the .st-key-v3cards CSS), so the card keeps its

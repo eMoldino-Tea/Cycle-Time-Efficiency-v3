@@ -97,10 +97,10 @@ def _render_deviation_graph(df, dim, freq, period_word, keyns):
     fig.add_trace(go.Scatter(
         x=dev['label'], y=dev['Weighted_Deviation'],
         mode="lines+markers", name="ACT-Weighted Deviation",
-        line=dict(color=ui.GREY, width=2.5), marker=dict(size=6),
+        line=dict(color=ui.WITHIN_COLOR, width=2.5), marker=dict(size=6),
         hovertemplate="<b>%{x}</b><br>Deviation: %{y:.2f}s<extra></extra>",
     ))
-    fig.add_hline(y=0, line_dash="dash", line_color="#475569",
+    fig.add_hline(y=0, line_dash="dash", line_color=ui.REFERENCE_LINE_COLOR,
                   annotation_text="On Target (ACT)", annotation_position="top left",
                   annotation_font_color="#94a3b8")
     fig.update_layout(
@@ -157,9 +157,9 @@ def _render_split_graph(df, freq, period_word, keyns):
     st.markdown(
         f'<div class="v3-statline">'
         f'<b>Cycle Time Efficiency {summ["ct_compliance"]:.0f}%</b> &nbsp;·&nbsp; '
-        f'<span style="color:{ui.RED};">Fast Shots {summ["pct_fast"]:.0f}%</span> &nbsp;·&nbsp; '
-        f'<span style="color:{ui.GREEN};">Within Shots {summ["pct_within"]:.0f}%</span> &nbsp;·&nbsp; '
-        f'<span style="color:{ui.YELLOW};">Slow Shots {summ["pct_slow"]:.0f}%</span> &nbsp;·&nbsp; '
+        f'<span style="color:{ui.FAST_COLOR};">Fast Shots {summ["pct_fast"]:.0f}%</span> &nbsp;·&nbsp; '
+        f'<span style="color:{ui.WITHIN_COLOR};">Within Shots {summ["pct_within"]:.0f}%</span> &nbsp;·&nbsp; '
+        f'<span style="color:{ui.SLOW_COLOR};">Slow Shots {summ["pct_slow"]:.0f}%</span> &nbsp;·&nbsp; '
         f'{summ["total_shots"]:,} shots &nbsp;·&nbsp; '
         f'{summ["active_buckets"]} {bucket_word}</div>',
         unsafe_allow_html=True)
@@ -178,9 +178,9 @@ def _render_split_graph(df, freq, period_word, keyns):
     # Data labels are staggered per series (top / right / bottom) so months with
     # close values never collide; exact figures are always in the unified hover.
     for col, name, color, symbol, textpos in [
-        ('Fast Shots (%)',   'Faster',  ui.RED,    'circle',        'top center'),
-        ('Within Shots (%)', 'Within',  ui.GREEN,  'square',        'middle right'),
-        ('Slow Shots (%)',   'Slower',  ui.YELLOW, 'triangle-up',   'bottom center'),
+        ('Fast Shots (%)',   'Faster',  ui.FAST_COLOR,   'circle',        'top center'),
+        ('Within Shots (%)', 'Within',  ui.WITHIN_COLOR, 'square',        'middle right'),
+        ('Slow Shots (%)',   'Slower',  ui.SLOW_COLOR,   'triangle-up',   'bottom center'),
     ]:
         fig.add_trace(go.Scatter(
             x=s['label'], y=s[col], name=name, yaxis="y2",
@@ -223,7 +223,7 @@ def _pie_figure(values, height=250):
               for v in values]
     fig = go.Figure(go.Pie(
         labels=['Fast', 'Within', 'Slow'], values=values, hole=0.55,
-        marker=dict(colors=[ui.RED, ui.GREEN, ui.YELLOW],
+        marker=dict(colors=[ui.FAST_COLOR, ui.WITHIN_COLOR, ui.SLOW_COLOR],
                     line=dict(color='#0f1117', width=2)),
         textinfo='percent', textfont=dict(color='#0f1117', size=12, weight="bold"),
         customdata=counts,
@@ -315,8 +315,8 @@ def ranking_bars(df, dims, tolerance_pct, keyns, top_n=10):
 
     left, right = st.columns(2)
     for col, data, metric, color, title in [
-        (left, gain, 'Financial Gained', ui.GREEN, f"Top {pick}s — Saving Opportunity"),
-        (right, loss, 'Financial Lost', ui.YELLOW, f"Top {pick}s — Loss"),
+        (left, gain, 'Financial Gained', ui.FAST_COLOR, f"Top {pick}s — Saving Opportunity"),
+        (right, loss, 'Financial Lost', ui.SLOW_COLOR, f"Top {pick}s — Loss"),
     ]:
         with col:
             st.markdown(f'<div style="color:#e2e8f0;font-size:1rem;font-weight:600;'
@@ -425,11 +425,11 @@ def render_detailed_analysis(scope, label, keyns, period_label, tolerance_pct,
             lfig = go.Figure()
             lfig.add_trace(go.Scatter(
                 x=trend['bucket'], y=trend['Efficiency_%'],
-                mode="lines+markers", line=dict(color="#7dd3fc", width=2.5),
+                mode="lines+markers", line=dict(color=ui.WITHIN_COLOR, width=2.5),
                 marker=dict(size=6),
                 hovertemplate="<b>%{x|%b %d, %Y}</b><br>Efficiency: %{y:.2f}%<extra></extra>",
             ))
-            lfig.add_hline(y=100, line_dash="dash", line_color=ui.GREY)
+            lfig.add_hline(y=100, line_dash="dash", line_color=ui.REFERENCE_LINE_COLOR)
             lfig.update_layout(
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                 height=380, margin=dict(l=10, r=20, t=20, b=10),
@@ -449,7 +449,7 @@ def render_detailed_analysis(scope, label, keyns, period_label, tolerance_pct,
                     row.get('Slow Shots (%)', 0) or 0]
             rpie = go.Figure(go.Pie(
                 labels=['Fast', 'Within', 'Slow'], values=vals, hole=0.55,
-                marker=dict(colors=[ui.RED, ui.GREEN, ui.YELLOW],
+                marker=dict(colors=[ui.FAST_COLOR, ui.WITHIN_COLOR, ui.SLOW_COLOR],
                             line=dict(color='#0f1117', width=2)),
                 textinfo='percent',
                 textfont=dict(color='#0f1117', size=13, weight="bold"),
