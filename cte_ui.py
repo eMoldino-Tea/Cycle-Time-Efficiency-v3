@@ -25,11 +25,14 @@ WITHIN_COLOR = "#5CA5FF"          # Within (Neutral) -- on-target / normal opera
 SLOW_COLOR = "#F8A425"            # Slow (Loss) -- caution indicator
 REFERENCE_LINE_COLOR = "#145741"  # Approved Cycle Time (ACT) baseline / target line
 # Shot-volume bars (a plain count, not a Fast/Within/Slow state): the guide's
-# own "Shot count" token for the Tooling app is Blue-900 (#002147), but that
-# reads as near-black against this dark theme's background, so this uses the
-# system's Primary blue instead -- same hue family, clearly visible here, and
-# distinct from WITHIN_COLOR's lighter blue on the same chart.
-VOLUME_COLOR = "#1663BB"
+# own token, "Shot (line) -- Blue-900".
+VOLUME_COLOR = "#002147"
+# The system's Primary blue, used independently below for a few unrelated UI
+# accents (light-mode links, chip borders, and the Within text-safe variant)
+# that happened to reuse VOLUME_COLOR before it was pinned to Blue-900 --
+# kept as their own literal now so changing the shot-bar color doesn't also
+# darken those.
+_PRIMARY = "#1663BB"
 STATUS_COLORS = {"Within": WITHIN_COLOR, "Slow": SLOW_COLOR, "Fast": FAST_COLOR}
 
 # ---- light/dark page chrome ------------------------------------------------
@@ -68,8 +71,8 @@ _LIGHT_THEME = {
     "muted_text": "#5B6472", "faint_text": "#8A94A6", "soft_text": "#1F1F1F",
     "card_bg": "#FFFFFF", "card_bg_alt": "#EEF2F6",
     "border": "#E2E8F0", "border_strong": "#CBD5E1",
-    "chip_bg": "#EFF6FF", "chip_border": VOLUME_COLOR,
-    "link": VOLUME_COLOR, "link_hover": "#0D4A8F",
+    "chip_bg": "#EFF6FF", "chip_border": _PRIMARY,
+    "link": _PRIMARY, "link_hover": "#0D4A8F",
     "badge_bg": "#E6F4EA", "badge_text": "#1A7053",  # the guide's own "Fast Cycle/Gain" green -- a good fit for a plain positive/info badge here, just not for CTE's own Fast state (see FAST_COLOR)
     "note_text": "#94A3B8",
     "chart_font": "#1F1F1F", "chart_tick": "#5B6472", "chart_grid": "#D8DEE6",
@@ -79,11 +82,11 @@ _LIGHT_THEME = {
     # white -- well under the 4.5:1 minimum). These are darkened, same-hue
     # stand-ins used ONLY for that plain-text case in light mode; every fill
     # usage (bars, pies, badges) keeps the exact brand hex in both themes.
-    # within_text reuses VOLUME_COLOR (Primary, #1663BB, 5.9:1 on white) --
-    # a sanctioned token rather than an invented blue. slow_text is a
-    # manually darkened SLOW_COLOR (5.97:1 on white); the guide gives no
-    # darker step for this hue, so this is an approximation, not a token.
-    "within_text": VOLUME_COLOR, "slow_text": "#885A14",
+    # within_text reuses the system's Primary blue (5.9:1 on white) -- a
+    # sanctioned token rather than an invented blue. slow_text is a manually
+    # darkened SLOW_COLOR (5.97:1 on white); the guide gives no darker step
+    # for this hue, so this is an approximation, not a token.
+    "within_text": _PRIMARY, "slow_text": "#885A14",
 }
 
 
