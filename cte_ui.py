@@ -23,6 +23,12 @@ FAST_COLOR = "#B04A5E"            # Fast (Gain) -- quality-risk flagged
 WITHIN_COLOR = "#5CA5FF"          # Within (Neutral) -- on-target / normal operation
 SLOW_COLOR = "#F8A425"            # Slow (Loss) -- caution indicator
 REFERENCE_LINE_COLOR = "#145741"  # Approved Cycle Time (ACT) baseline / target line
+# Shot-volume bars (a plain count, not a Fast/Within/Slow state): the guide's
+# own "Shot count" token for the Tooling app is Blue-900 (#002147), but that
+# reads as near-black against this dark theme's background, so this uses the
+# system's Primary blue instead -- same hue family, clearly visible here, and
+# distinct from WITHIN_COLOR's lighter blue on the same chart.
+VOLUME_COLOR = "#1663BB"
 GREY = "#94a3b8"
 STATUS_COLORS = {"Within": WITHIN_COLOR, "Slow": SLOW_COLOR, "Fast": FAST_COLOR}
 
@@ -352,18 +358,30 @@ def neg_help(df):
 
 
 def _status_css(v):
-    return {"Fast": "background-color:#7f1d1d;color:#fff;",
-            "Slow": "background-color:#854d0e;color:#fff;",
-            "Within": "background-color:#14532d;color:#fff;"}.get(v, "")
+    # Same fill colors as the charts (FAST_COLOR/WITHIN_COLOR/SLOW_COLOR), so
+    # a table badge and a pie slice for the same state always agree. Text
+    # color is picked per background for contrast: WITHIN_COLOR and
+    # SLOW_COLOR are light enough that white text fails WCAG AA (2.5:1 and
+    # 2.0:1), so both use the same dark near-black already proven legible on
+    # these fills by the pie/donut slice labels; FAST_COLOR is dark enough
+    # that white text is the better contrast (5.3:1 vs 3.6:1 for dark text).
+    return {"Fast": f"background-color:{FAST_COLOR};color:#fff;",
+            "Slow": f"background-color:{SLOW_COLOR};color:#0f1117;",
+            "Within": f"background-color:{WITHIN_COLOR};color:#0f1117;"}.get(v, "")
 
 
 def trend_change_css(v):
+    # This column tracks ACT-Weighted Deviation (seconds off the Approved
+    # Cycle Time), so an increase (↑) is drift AWAY from target -- the same
+    # direction as the Slow/caution state -- and a decrease (↓) is movement
+    # TOWARD target, the Within/on-target state. Reuses those two tokens
+    # rather than inventing a separate generic good/bad pair.
     if not isinstance(v, str) or v == '—':
         return 'color:#94a3b8;'
     if v.startswith('↑'):
-        return 'color:#d9534f;'
+        return f'color:{SLOW_COLOR};'
     if v.startswith('↓'):
-        return 'color:#5cb85c;'
+        return f'color:{WITHIN_COLOR};'
     return 'color:#94a3b8;'
 
 

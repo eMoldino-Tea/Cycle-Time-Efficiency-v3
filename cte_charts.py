@@ -170,7 +170,7 @@ def _render_split_graph(df, freq, period_word, keyns):
     fig = go.Figure()
     fig.add_trace(go.Bar(
         x=s['label'], y=s['Total Shots'], name="Shots",
-        marker_color="#3f4757", yaxis="y",
+        marker_color=ui.VOLUME_COLOR, yaxis="y",
         text=s['Total Shots'], texttemplate="%{text:.2s}", textposition="outside",
         textfont=dict(color="#94a3b8", size=10), cliponaxis=False,
         hovertemplate="<b>%{x}</b><br>Shots: %{y:,}<extra></extra>",

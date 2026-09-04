@@ -57,6 +57,10 @@ STACKS = {
 
 def run_at(stack=None):
     at = AppTest.from_file(APP, default_timeout=300)
+    # Skip the password gate: seeding "authenticated" pre-run bypasses the
+    # login screen entirely (st.secrets is never touched), so tests exercise
+    # the dashboard itself rather than the login form in front of it.
+    at.session_state["authenticated"] = True
     if stack is not None:
         at.session_state[nav._STACK_KEY] = list(stack)
     at.run()
@@ -506,6 +510,7 @@ def test_tool_list_row_count_matches_the_card_that_opened_it():
 def test_a_forward_crumb_appears_after_navigating_back():
     """Going back must offer the way forward again, per the breadcrumb spec."""
     at = AppTest.from_file(APP, default_timeout=300)
+    at.session_state["authenticated"] = True
     at.session_state[nav._STACK_KEY] = [("global", None), ("region", "APAC")]
     at.run()
     back = [b for b in at.button if b.key and b.key.startswith("crumb_")][0]
