@@ -90,7 +90,7 @@ _LIGHT_THEME = {
 }
 
 
-_THEME_OVERRIDE_KEY = "v3_theme_override"
+_THEME_RADIO_KEY = "v3_theme_radio"
 
 
 def get_theme():
@@ -98,7 +98,12 @@ def get_theme():
 
     Order of precedence:
       1. An explicit choice from this app's own sidebar toggle (render_
-         theme_toggle), stored in session_state -- "auto" means no override.
+         theme_toggle) -- read directly from that widget's OWN session_state
+         entry, "Auto" meaning no override. Deliberately not a separate
+         tracking key: recomputing one from the other (an earlier version
+         of this function did) creates a feedback loop, since the widget's
+         `index` would then be derived, every rerun, from the very value
+         the user just changed it away from -- see render_theme_toggle.
       2. Otherwise, Streamlit's own theme setting (its Settings menu, which
          itself can follow the OS): st.context.theme.type reflects that
          regardless of this app's own CSS overrides below, so detection
@@ -110,15 +115,27 @@ def get_theme():
     app's original and most-tested design.
 
     Note this only ever changes colors THIS APP injects itself (page
-    background, cards, text, every chart). Streamlit has no documented API
-    to force its own native widget chrome (slider tracks, the native
-    dataframe grid, scrollbars) to a specific theme at runtime -- those
-    keep following the browser's real theme regardless of what's picked
-    here, and can look mismatched if the two disagree.
+    background, cards, text, every chart), plus the specific native
+    elements inject_theme's CSS explicitly repaints (the sidebar itself,
+    and BaseWeb input/select/button chrome -- see those rules' comments).
+    What it can NOT reach: the canvas-rendered dataframe grid above all,
+    since CSS cannot restyle pixels a <canvas> already painted, plus
+    sliders and scrollbars. Streamlit has no documented API to force this
+    remaining native chrome to a specific theme at runtime; it keeps
+    following the browser's real theme regardless of what's picked here.
+
+    (An undocumented workaround exists -- Streamlit persists its own
+    theme choice in a localStorage key its frontend reads at startup, and
+    writing that key directly does make the canvas grid follow too. Tried
+    and reverted: forcing that to take effect needs a real page reload,
+    since Streamlit only reads the key at startup rather than reactively,
+    and a components.html-injected reload() triggered a runaway reload
+    loop in testing that made the local dev server stop responding for a
+    stretch. Not worth that risk for one remaining widget type.)
     """
-    override = st.session_state.get(_THEME_OVERRIDE_KEY, "auto")
-    if override in ("light", "dark"):
-        return _LIGHT_THEME if override == "light" else _DARK_THEME
+    override = st.session_state.get(_THEME_RADIO_KEY, "Auto")
+    if override in ("Light", "Dark"):
+        return _LIGHT_THEME if override == "Light" else _DARK_THEME
     try:
         mode = st.context.theme.type
     except Exception:
@@ -131,20 +148,30 @@ def render_theme_toggle():
     of following Streamlit's own (hard-to-reach, since this app hides
     Streamlit's own menu -- see inject_theme's #MainMenu rule) theme
     setting. "Auto" clears the override and falls back to that detection.
+
+    No explicit state handling needed beyond the widget itself: a keyed
+    widget's own session_state entry IS the override get_theme() reads, so
+    Streamlit's normal reactivity (a widget change reruns the script, and
+    session_state[key] is populated from that pending change before the
+    script starts) is already sufficient -- confirmed live, the very same
+    run that registers the click already renders with the new theme's CSS.
+
+    No `index=` argument, deliberately: Streamlit uses it only to seed a
+    keyed widget's FIRST-EVER render (defaulting to "Auto" here, option 0,
+    exactly the desired default), then manages session_state[key] itself
+    from then on via the widget's own reactivity. Recomputing `index` from
+    that same session_state on every rerun -- an earlier version of this
+    function did, via a second, separate tracking key -- fights that:
+    Streamlit resolved the widget back to whatever `index` said rather
+    than the reader's just-made pending selection, so the control could
+    never actually move away from its initial value.
     """
-    labels = ["Auto", "Dark", "Light"]
-    values = ["auto", "dark", "light"]
-    current = st.session_state.get(_THEME_OVERRIDE_KEY, "auto")
     st.sidebar.markdown("### Appearance")
-    choice = st.sidebar.radio(
-        "Theme", labels, index=values.index(current), horizontal=True,
-        key="v3_theme_radio", label_visibility="collapsed",
+    st.sidebar.radio(
+        "Theme", ["Auto", "Dark", "Light"], horizontal=True,
+        key=_THEME_RADIO_KEY, label_visibility="collapsed",
         help="Auto follows your browser/OS setting.",
     )
-    new_value = values[labels.index(choice)]
-    if new_value != current:
-        st.session_state[_THEME_OVERRIDE_KEY] = new_value
-        st.rerun()
 
 
 def esc(value):
@@ -230,18 +257,27 @@ header {background-color:transparent !important;}
    reader's manual choice disagrees with their actual browser theme. */
 [data-testid="stSidebar"] { background-color:${page_bg} !important; }
 [data-testid="stSidebar"] * { color:${page_text}; }
-/* Number/text input boxes (Tolerance, Financial Parameters, High-Runner
-   Filter, Custom Range dates) paint their own chrome via BaseWeb's
-   data-baseweb attribute rather than inheriting the sidebar's background
-   above, so forcing their TEXT to page_text without also repainting this
-   would put dark-on-dark (or light-on-light) text straight into the
-   input -- illegible, not just mistinted. data-baseweb is Streamlit's own
-   stable hook for this, unlike its generated one-off class names. */
-[data-testid="stSidebar"] [data-baseweb="input"],
-[data-testid="stSidebar"] [data-baseweb="base-input"],
-[data-testid="stSidebar"] [data-testid="stNumberInputStepDown"],
-[data-testid="stSidebar"] [data-testid="stNumberInputStepUp"] {
+/* Every native BaseWeb/Streamlit control that paints its OWN chrome rather
+   than inheriting .stApp's background -- input/select boxes, secondary
+   buttons (pie-caption drill buttons, Export CSV, the dataframe toolbar),
+   and the number-input step buttons -- wherever they appear, not just the
+   sidebar: the very same gap the sidebar rule above closes exists for
+   every one of these in the MAIN content area too, since .stApp's `color`
+   still cascades text onto them even though its `background-color`
+   doesn't. Left unfixed, that's dark-on-dark (or light-on-light) text
+   sitting directly in a "29 tools" drill button or a search box -- not
+   just mistinted, actually illegible. data-baseweb/data-testid are
+   Streamlit's own stable hooks for this, unlike its generated one-off
+   class names. */
+[data-baseweb="input"],
+[data-baseweb="base-input"],
+[data-baseweb="select"],
+[data-testid="stNumberInputStepDown"],
+[data-testid="stNumberInputStepUp"],
+[data-testid="stBaseButton-secondary"],
+[data-testid="stElementToolbarButtonContainer"] {
   background-color:${card_bg} !important; border-color:${border} !important;
+  color:${page_text} !important;
 }
 
 .dash-header {font-size:1.85rem; font-weight:700; color:${page_text}; margin-bottom:.25rem; letter-spacing:.5px;}

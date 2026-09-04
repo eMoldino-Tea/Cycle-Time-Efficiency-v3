@@ -526,7 +526,7 @@ def test_a_forward_crumb_appears_after_navigating_back():
 
 
 def _theme_radio(at):
-    return [r for r in at.radio if r.key == "v3_theme_radio"][0]
+    return [r for r in at.radio if r.key == ui._THEME_RADIO_KEY][0]
 
 
 def test_theme_toggle_appears_in_sidebar_defaulting_to_auto():
@@ -538,25 +538,37 @@ def test_theme_toggle_appears_in_sidebar_defaulting_to_auto():
 
 def test_picking_light_in_the_toggle_actually_changes_the_rendered_css():
     """End-to-end: the widget a reader clicks must reach get_theme() and
-    change what inject_theme() emits on the very next run, not just update
-    some inert session_state key."""
+    change what inject_theme() emits, not just update some inert
+    session_state key. Takes effect on the SAME run as the click (not the
+    next one): get_theme() reads the radio widget's own session_state
+    entry directly, which Streamlit populates from the pending interaction
+    before the script starts, ahead of inject_theme()'s own call this run."""
     at = run_at(STACKS["global"])
     before = [m.value for m in at.markdown if ".stApp {" in m.value][0]
     assert ui._LIGHT_THEME["page_bg"] not in before
 
     _theme_radio(at).set_value("Light").run()
     assert not at.exception
-    assert at.session_state[ui._THEME_OVERRIDE_KEY] == "light"
+    assert at.session_state[ui._THEME_RADIO_KEY] == "Light"
     after = [m.value for m in at.markdown if ".stApp {" in m.value][0]
     assert ui._LIGHT_THEME["page_bg"] in after
     assert ui._DARK_THEME["page_bg"] not in after
 
 
 def test_picking_auto_after_light_clears_the_override():
+    """Regression guard: an earlier version of render_theme_toggle() passed
+    `index=` recomputed from session_state on every rerun, which fought
+    the reader's own pending selection -- Streamlit kept resolving the
+    widget back to its OLD value, so it could never actually move away
+    from whatever it was first rendered with. No `index=` argument now."""
     at = run_at(STACKS["global"])
     _theme_radio(at).set_value("Light").run()
-    assert at.session_state[ui._THEME_OVERRIDE_KEY] == "light"
+    assert at.session_state[ui._THEME_RADIO_KEY] == "Light"
 
     _theme_radio(at).set_value("Auto").run()
     assert not at.exception
-    assert at.session_state[ui._THEME_OVERRIDE_KEY] == "auto"
+    assert at.session_state[ui._THEME_RADIO_KEY] == "Auto"
+
+    _theme_radio(at).set_value("Dark").run()
+    assert not at.exception
+    assert at.session_state[ui._THEME_RADIO_KEY] == "Dark"

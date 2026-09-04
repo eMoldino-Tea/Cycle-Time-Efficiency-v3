@@ -201,15 +201,22 @@ def test_explicit_light_override_wins_over_a_dark_browser(fake_theme, session_st
     """The sidebar toggle exists specifically to let a reader pick a theme
     Streamlit itself isn't reporting (e.g. its own Settings menu is hidden
     -- see inject_theme's #MainMenu rule) -- so an explicit choice must beat
-    whatever st.context.theme.type says, not just supplement it."""
+    whatever st.context.theme.type says, not just supplement it.
+
+    get_theme() reads the radio widget's OWN session_state entry directly
+    (_THEME_RADIO_KEY) rather than a separate tracking key -- an earlier
+    version used one, and recomputing that key's value as the widget's
+    `index` on every rerun fought the reader's own pending click (see
+    render_theme_toggle's docstring and test_app_smoke.py's
+    test_picking_auto_after_light_clears_the_override)."""
     fake_theme("dark")
-    session_state[ui._THEME_OVERRIDE_KEY] = "light"
+    session_state[ui._THEME_RADIO_KEY] = "Light"
     assert ui.get_theme() is ui._LIGHT_THEME
 
 
 def test_explicit_dark_override_wins_over_a_light_browser(fake_theme, session_state):
     fake_theme("light")
-    session_state[ui._THEME_OVERRIDE_KEY] = "dark"
+    session_state[ui._THEME_RADIO_KEY] = "Dark"
     assert ui.get_theme() is ui._DARK_THEME
 
 
@@ -218,22 +225,22 @@ def test_auto_override_falls_back_to_detected_theme(fake_theme, session_state):
     palette -- it must defer back to st.context.theme.type exactly as if no
     override had ever been set."""
     fake_theme("light")
-    session_state[ui._THEME_OVERRIDE_KEY] = "auto"
+    session_state[ui._THEME_RADIO_KEY] = "Auto"
     assert ui.get_theme() is ui._LIGHT_THEME
 
 
 def test_no_override_present_falls_back_to_detected_theme(fake_theme, session_state):
     """The common case: a reader who has never touched the toggle."""
     fake_theme("light")
-    assert ui._THEME_OVERRIDE_KEY not in session_state
+    assert ui._THEME_RADIO_KEY not in session_state
     assert ui.get_theme() is ui._LIGHT_THEME
 
 
 def test_garbage_override_value_is_ignored(fake_theme, session_state):
-    """Only the literal 'light'/'dark' strings the toggle itself writes
+    """Only the literal 'Light'/'Dark' strings the toggle itself writes
     count as an override; anything else (a stale value from a future
     version of this app, session_state tampering) falls through to
     detection rather than crashing or silently defaulting to one theme."""
     fake_theme("light")
-    session_state[ui._THEME_OVERRIDE_KEY] = "solarized"
+    session_state[ui._THEME_RADIO_KEY] = "solarized"
     assert ui.get_theme() is ui._LIGHT_THEME
