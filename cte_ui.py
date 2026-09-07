@@ -118,20 +118,21 @@ def get_theme():
     background, cards, text, every chart), plus the specific native
     elements inject_theme's CSS explicitly repaints (the sidebar itself,
     and BaseWeb input/select/button chrome -- see those rules' comments).
-    What it can NOT reach: the canvas-rendered dataframe grid above all,
-    since CSS cannot restyle pixels a <canvas> already painted, plus
-    sliders and scrollbars. Streamlit has no documented API to force this
-    remaining native chrome to a specific theme at runtime; it keeps
+    What it can NOT reach via CSS: the canvas-rendered dataframe grid
+    above all, since CSS cannot restyle pixels a <canvas> already painted,
+    plus sliders and scrollbars. Streamlit has no documented API to force
+    this remaining native chrome to a specific theme at runtime; it keeps
     following the browser's real theme regardless of what's picked here.
 
-    (An undocumented workaround exists -- Streamlit persists its own
-    theme choice in a localStorage key its frontend reads at startup, and
-    writing that key directly does make the canvas grid follow too. Tried
-    and reverted: forcing that to take effect needs a real page reload,
-    since Streamlit only reads the key at startup rather than reactively,
-    and a components.html-injected reload() triggered a runaway reload
-    loop in testing that made the local dev server stop responding for a
-    stretch. Not worth that risk for one remaining widget type.)
+    (Deliberately not "fixed" by writing Streamlit's own theme-choice
+    localStorage key and reloading -- tried twice. The write+reload
+    mechanics themselves can be made loop-safe (a read-before-write guard:
+    skip the reload when the stored value already matches). But this app
+    gates on a password held in plain st.session_state, which a hard
+    browser reload does not preserve -- confirmed directly, reproducibly,
+    every time: picking Light or Dark logged the session straight back out
+    to the password screen. That's not a rare edge case to guard against,
+    it's the guaranteed outcome of every reload, so this stays CSS-only.)
     """
     override = st.session_state.get(_THEME_RADIO_KEY, "Auto")
     if override in ("Light", "Dark"):
