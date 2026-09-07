@@ -279,6 +279,17 @@ header {background-color:transparent !important;}
   background-color:${card_bg} !important; border-color:${border} !important;
   color:${page_text} !important;
 }
+/* Multiselect/selectbox ("Master Filter", "Rank by" dimension pickers,
+   etc.) paint their actual visible control on a CHILD of
+   [data-baseweb="select"] -- a single, unlabeled div with no data-testid
+   or data-baseweb of its own -- not on [data-baseweb="select"] itself
+   (confirmed by walking its subtree for a non-transparent background).
+   So the rule above repaints the right OUTER box, but that inner child
+   still shows its own dark fill on top of it. Targeted by position
+   (its only div child) rather than a generated class name. */
+[data-baseweb="select"] > div {
+  background-color:${card_bg} !important; border-color:${border} !important;
+}
 
 .dash-header {font-size:1.85rem; font-weight:700; color:${page_text}; margin-bottom:.25rem; letter-spacing:.5px;}
 .dash-sub {color:${muted_text}; font-size:.95rem; margin-bottom:1.5rem;}
