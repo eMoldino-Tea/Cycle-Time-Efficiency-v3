@@ -336,24 +336,39 @@ def ranking_bars(df, dims, tolerance_pct, keyns, top_n=10):
     dimension picker plus paired gain/loss bar charts, so all six rankings are
     available without six stacked charts.
 
+    Each side is independently sorted by its own dollar figure -- best (the
+    biggest saving opportunity) first for Gain, worst (the biggest loss)
+    first for Loss -- via ranking_by_financial's descending sort; sort_values
+    below re-sorts ascending only because Plotly draws the first row of a
+    horizontal bar chart at the BOTTOM of the axis, so ascending data reads
+    top-to-bottom as best-to-worst / worst-to-best on screen.
+
+    A "Show full list" toggle switches both sides from the top-`top_n` cut
+    to every entity (ranking_by_financial(top_n=None)), for when a reader
+    needs the whole supplier/plant/etc. list rather than just the extremes.
+
     Returns (dimension, entity) for a clicked bar, else None.
     """
     dims = [d for d in dims if d in df.columns]
     if not dims:
         return
     pick = st.radio("Rank by", dims, horizontal=True, key=f"rankdim_{keyns}")
-    gain = core.ranking_by_financial(df, pick, 'Financial Gained', top_n, tolerance_pct)
-    loss = core.ranking_by_financial(df, pick, 'Financial Lost', top_n, tolerance_pct)
+    show_full = st.checkbox("Show full list", key=f"rankfull_{keyns}",
+                            help=f"Show every {pick.lower()} instead of just the top {top_n}")
+    n = None if show_full else top_n
+    gain = core.ranking_by_financial(df, pick, 'Financial Gained', n, tolerance_pct)
+    loss = core.ranking_by_financial(df, pick, 'Financial Lost', n, tolerance_pct)
     if gain.empty:
         st.info("No data available for this ranking.")
         return None
     clicked = None
     t = ui.get_theme()
+    qualifier = "All" if show_full else f"Top {top_n}"
 
     left, right = st.columns(2)
     for col, data, metric, color, title in [
-        (left, gain, 'Financial Gained', ui.FAST_COLOR, f"Top {pick}s — Saving Opportunity"),
-        (right, loss, 'Financial Lost', ui.SLOW_COLOR, f"Top {pick}s — Loss"),
+        (left, gain, 'Financial Gained', ui.FAST_COLOR, f"{qualifier} {pick}s — Saving Opportunity"),
+        (right, loss, 'Financial Lost', ui.SLOW_COLOR, f"{qualifier} {pick}s — Loss"),
     ]:
         with col:
             st.markdown(f'<div style="color:{t["soft_text"]};font-size:1rem;font-weight:600;'
