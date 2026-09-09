@@ -328,6 +328,38 @@ def single_pie(df, tolerance_pct, keyns, title="Cycle Time Efficiency Split"):
 # --------------------------------------------------------------------------
 # Rankings
 # --------------------------------------------------------------------------
+def _ranking_detail_table(df, pick, tolerance_pct, keyns):
+    """The "Show full list" view: one detail table with every `pick` entity
+    and every column generate_ranking_table_data computes, in place of the
+    paired bar charts -- see ranking_bars' own docstring for why.
+
+    Sorted worst-to-best by Overall Efficiency % (generate_ranking_table_data's
+    own default), a single neutral ordering rather than favoring either the
+    Gain or the Loss side the way the two bar charts each did on their own.
+
+    Returns (pick, entity) for a clicked row, matching ranking_bars' own
+    (dimension, entity) click contract, so callers don't need to branch on
+    which view produced the click.
+    """
+    detail = core.generate_ranking_table_data(df, pick, tolerance_pct)
+    if detail.empty:
+        st.info("No data available for this ranking.")
+        return None
+    t = ui.get_theme()
+    st.markdown(f'<div style="color:{t["soft_text"]};font-size:1rem;font-weight:600;'
+                f'margin-bottom:4px;">All {ui.esc(pick)}s — Detail</div>', unsafe_allow_html=True)
+    event = st.dataframe(
+        ui.style_table(ui.v3_display(detail), ui.DETAIL_FMT),
+        width="stretch", hide_index=True,
+        on_select="rerun", selection_mode="single-row",
+        key=f"rankdetail_{keyns}", column_config=ui.neg_help(detail))
+    if event and event.selection and event.selection.rows:
+        idx = event.selection.rows[0]
+        if idx < len(detail):
+            return (pick, detail.iloc[idx][pick])
+    return None
+
+
 def ranking_bars(df, dims, tolerance_pct, keyns, top_n=10, show_selector=True):
     """Saving-opportunity and loss rankings across one or more dimensions.
 
@@ -349,14 +381,18 @@ def ranking_bars(df, dims, tolerance_pct, keyns, top_n=10, show_selector=True):
     horizontal bar chart at the BOTTOM of the axis, so ascending data reads
     top-to-bottom as best-to-worst / worst-to-best on screen.
 
-    A "Show full list" toggle switches both sides from the top-`top_n` cut
-    to every entity, for when a reader needs the whole supplier/plant/etc.
-    list rather than just the extremes. The toggle only appears when there
-    are actually more than `top_n` entities to hide -- e.g. Region (4
-    entities) never shows it, since "top 10" already is the full list and a
-    checkbox that visibly changes nothing just reads as broken.
+    A "Show full list" toggle switches from the top-`top_n` paired bar
+    charts to a single detail table covering every entity: past a handful
+    of extra rows, two side-by-side bar charts each growing taller become
+    harder to read than one sortable table, and a table surfaces every
+    computed column (Total Toolings, Hours/Shots Gained & Lost, Net
+    figures, Efficiency %, Performance Status), not just the one metric a
+    bar's length can show. The toggle only appears when there are actually
+    more than `top_n` entities to hide -- e.g. Region (4 entities) never
+    shows it, since "top 10" already is the full list and a checkbox that
+    visibly changes nothing just reads as broken.
 
-    Returns (dimension, entity) for a clicked bar, else None.
+    Returns (dimension, entity) for a clicked bar or table row, else None.
     """
     dims = [d for d in dims if d in df.columns]
     if not dims:
@@ -373,16 +409,21 @@ def ranking_bars(df, dims, tolerance_pct, keyns, top_n=10, show_selector=True):
         st.info("No data available for this ranking.")
         return None
     total_entities = len(gain_full)
-    show_full = total_entities <= top_n
-    if not show_full:
+    needs_toggle = total_entities > top_n
+    show_full = False
+    if needs_toggle:
         show_full = st.checkbox(
             "Show full list", key=f"rankfull_{keyns}",
             help=f"Show all {total_entities} {pick.lower()}s instead of just the top {top_n}")
-    gain = gain_full if show_full else gain_full.head(top_n)
-    loss = loss_full if show_full else loss_full.head(top_n)
+
+    if show_full:
+        return _ranking_detail_table(df, pick, tolerance_pct, keyns)
+
+    gain = gain_full.head(top_n)
+    loss = loss_full.head(top_n)
     clicked = None
     t = ui.get_theme()
-    qualifier = "All" if show_full else f"Top {top_n}"
+    qualifier = "All" if not needs_toggle else f"Top {top_n}"
 
     left, right = st.columns(2)
     for col, data, metric, color, title in [

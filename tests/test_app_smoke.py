@@ -406,6 +406,48 @@ def test_rank_by_selector_disappears_when_nothing_is_left_below_selection():
     assert "Saving Opportunity & Loss Ranking" not in all_text(at)
 
 
+def test_show_full_list_renders_a_detail_table_not_bar_charts(monkeypatch):
+    """Past top_n entities, "Show full list" swaps the paired bar charts for
+    one detail table -- see ranking_bars' own docstring for why. This demo
+    fleet's suppliers never naturally exceed the real top_n=10, so top_n is
+    forced down to 3 here purely to exercise that threshold without a much
+    larger fixture. Filtered to Region=APAC: 12 of the 14 demo suppliers
+    operate there (Jabil and Wistron don't)."""
+    import cte_charts as charts
+    orig_ranking_bars = charts.ranking_bars
+
+    def _low_top_n(df, dims, tolerance_pct, keyns, top_n=10, show_selector=True):
+        return orig_ranking_bars(df, dims, tolerance_pct, keyns, top_n=3,
+                                 show_selector=show_selector)
+
+    import cte_views as views
+    monkeypatch.setattr(views.ch, "ranking_bars", _low_top_n)
+
+    at = run_at(STACKS["global"])
+    at = _set_master_filter(at, "Region", ["APAC"])
+    rank = [r for r in at.radio if r.label == "Rank by"]
+    assert rank, "no Rank-by selector after a Region selection"
+    at = rank[0].set_value("Supplier").run()
+
+    cb = [c for c in at.checkbox if c.label == "Show full list"]
+    assert cb, "expected a Show full list checkbox with 12 APAC suppliers over a top_n of 3"
+    at = cb[0].set_value(True).run()
+
+    rank_charts = [c for c in at.get("plotly_chart") if c.key and c.key.startswith("rank_")]
+    assert not rank_charts, "Show full list should render a table, not bar charts"
+    # AppTest doesn't surface a styled st.dataframe's own `key=`, so the
+    # ranking detail table is identified by its distinctive leading column
+    # (generate_ranking_table_data always inserts 'Rank' first) instead.
+    detail_tables = [d for d in at.dataframe
+                     if list(d.value.columns[:1]) == ["Rank"]]
+    assert detail_tables, "Show full list should render a detail table"
+    detail = detail_tables[0].value
+    for col in ["Rank", "Supplier", "Total Tools", "Saving Opportunity", "Loss",
+               "Net Financial", "Overall Efficiency %", "Performance Status"]:
+        assert col in detail.columns, f"detail table missing column {col!r}"
+    assert len(detail) == 12, "detail table should list every APAC supplier, not just the top 3"
+
+
 # ---- Detailed Analysis: the selected-item summary --------------------------
 
 # Every tier where something is actually selected. Root tabs are excluded on

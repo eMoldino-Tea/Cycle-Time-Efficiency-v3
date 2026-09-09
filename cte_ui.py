@@ -493,11 +493,11 @@ DETAIL_FMT = {
     "WACT (Fast)": "{:.2f}", "WACT (Slow)": "{:.2f}",
     "Expected Hours (Fast)": "{:.2f}", "Expected Hours (Slow)": "{:.2f}",
     "Actual Hours (Fast)": "{:.2f}", "Actual Hours (Slow)": "{:.2f}",
-    "Hours Gained": "{:.2f}", "Hours Lost": "{:.2f}",
-    "Shots Gained": "{:,.0f}", "Shots Lost": "{:,.0f}",
+    "Hours Gained": "{:.2f}", "Hours Lost": "{:.2f}", "Net Hours": "{:.2f}",
+    "Shots Gained": "{:,.0f}", "Shots Lost": "{:,.0f}", "Net Shots": "{:,.0f}",
     "Financial Gain": "${:,.0f}", "Financial Loss": "${:,.0f}", "Net Financial": "${:,.0f}",
     "CT Efficiency of Fast Hours": "{:.2f}%", "CT Efficiency of Slow Hours": "{:.2f}%",
-    "CT Weighted Average Efficiency": "{:.2f}%",
+    "CT Weighted Average Efficiency": "{:.2f}%", "Overall Efficiency %": "{:.2f}%",
     "Total Toolings": "{:,.0f}",
 }
 TREND2_FMT = {
