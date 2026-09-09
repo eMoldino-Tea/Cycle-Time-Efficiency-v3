@@ -261,11 +261,18 @@ def _pie_figure(values, height=250):
     return fig
 
 
-def small_multiple_pies(df, dim, tolerance_pct, keyns, max_pies=8):
-    """One small pie per entity in `dim`, side by side — never one combined pie.
+def small_multiple_pies(df, dim, tolerance_pct, keyns, max_pies=8, per_row=4):
+    """One small pie per entity in `dim`, laid out in a wrapping grid — never
+    one combined pie.
 
     Each pie is that entity's own Fast/Within/Slow split, counted over its
     tools (the same classification the summary tiles above use).
+
+    Capped at `per_row` columns regardless of how many entities are shown: a
+    single `st.columns(len(shown))` row (the previous approach) divides the
+    page width by the entity count, so 8 suppliers squeezed every pie into an
+    unreadable sliver. Wrapping into multiple rows of at most `per_row` keeps
+    each pie a legible, constant width no matter how many entities there are.
 
     Returns the entity whose caption was clicked this run, else None.
     """
@@ -274,26 +281,31 @@ def small_multiple_pies(df, dim, tolerance_pct, keyns, max_pies=8):
         return None
     clicked = None
     shown = entities[:max_pies]
-    cols = st.columns(len(shown), gap="small")
-    for col, ent in zip(cols, shown):
-        with col:
-            sub = df[df[dim] == ent]
-            s = core.fast_within_slow_summary(sub, 'Tooling', tolerance_pct)
-            # `ent` is a real entity value (region / country / supplier
-            # name, ...) that can originate from an operator-supplied CSV.
-            st.markdown(f'<div style="text-align:center;color:{ui.get_theme()["soft_text"]};font-size:.92rem;'
-                        f'font-weight:600;margin-bottom:2px;">{ui.esc(ent)}</div>',
-                        unsafe_allow_html=True)
-            st.plotly_chart(_pie_figure([s['fast'], s['within'], s['slow']]),
-                            use_container_width=True, key=f"pie_{keyns}_{dim}_{ent}")
-            # The caption is the click target rather than the slice itself:
-            # Streamlit's plotly selection API is built around cartesian
-            # charts, so pie-slice clicks are not dependable. A button styled
-            # as the caption keeps the pies visually untouched and the whole
-            # affordance obvious.
-            if st.button(f'{s["total"]} tools', key=f"piebtn_{keyns}_{dim}_{ent}",
-                         help=f"View {ent} tools"):
-                clicked = ent
+    # min() so a short row (e.g. 3 regions) still spans the full width
+    # exactly as before, rather than leaving a gap sized for `per_row`.
+    row_width = min(per_row, len(shown))
+    for row_start in range(0, len(shown), row_width):
+        row_entities = shown[row_start:row_start + row_width]
+        cols = st.columns(row_width, gap="small")
+        for col, ent in zip(cols, row_entities):
+            with col:
+                sub = df[df[dim] == ent]
+                s = core.fast_within_slow_summary(sub, 'Tooling', tolerance_pct)
+                # `ent` is a real entity value (region / country / supplier
+                # name, ...) that can originate from an operator-supplied CSV.
+                st.markdown(f'<div style="text-align:center;color:{ui.get_theme()["soft_text"]};font-size:.92rem;'
+                            f'font-weight:600;margin-bottom:2px;">{ui.esc(ent)}</div>',
+                            unsafe_allow_html=True)
+                st.plotly_chart(_pie_figure([s['fast'], s['within'], s['slow']]),
+                                use_container_width=True, key=f"pie_{keyns}_{dim}_{ent}")
+                # The caption is the click target rather than the slice itself:
+                # Streamlit's plotly selection API is built around cartesian
+                # charts, so pie-slice clicks are not dependable. A button styled
+                # as the caption keeps the pies visually untouched and the whole
+                # affordance obvious.
+                if st.button(f'{s["total"]} tools', key=f"piebtn_{keyns}_{dim}_{ent}",
+                             help=f"View {ent} tools"):
+                    clicked = ent
     if len(entities) > max_pies:
         st.caption(f"Showing {max_pies} of {len(entities)} {dim.lower()}s — "
                    f"use the Master Filter to narrow further.")
