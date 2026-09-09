@@ -27,24 +27,18 @@ REFERENCE_LINE_COLOR = "#145741"  # Approved Cycle Time (ACT) baseline / target 
 # Shot-volume bars (a plain count, not a Fast/Within/Slow state): the guide's
 # own token, "Shot (line) -- Blue-900".
 VOLUME_COLOR = "#002147"
-# The system's Primary blue, used independently below for a few unrelated UI
-# accents (light-mode links, chip borders, and the Within text-safe variant)
-# that happened to reuse VOLUME_COLOR before it was pinned to Blue-900 --
-# kept as their own literal now so changing the shot-bar color doesn't also
-# darken those.
-_PRIMARY = "#1663BB"
 STATUS_COLORS = {"Within": WITHIN_COLOR, "Slow": SLOW_COLOR, "Fast": FAST_COLOR}
 
-# ---- light/dark page chrome ------------------------------------------------
+# ---- page chrome (dark theme) -----------------------------------------
 # FAST_COLOR / WITHIN_COLOR / SLOW_COLOR / REFERENCE_LINE_COLOR / VOLUME_COLOR
-# above are NOT theme-dependent -- the design guide documents no light/dark
-# variant for them, and every place they're used is a self-contained fill
-# (a bar, a pie slice, a table badge) with its own already-verified text
-# contrast, independent of the surrounding page background. What DOES need
-# two versions is everything the page background touches: card fills, borders,
-# body text, and chart axes/gridlines, all of which were designed against
-# this app's original near-black canvas and would be washed out or invisible
-# against a light one.
+# above are fixed regardless of theme -- every place they're used is a
+# self-contained fill (a bar, a pie slice, a table badge) with its own
+# already-verified text contrast, independent of the surrounding page
+# background. The app is dark-mode only: see .streamlit/config.toml's
+# [theme] base="dark", which also locks every native Streamlit element this
+# CSS can't reach (the canvas-rendered dataframe grid, sliders, scrollbars)
+# to dark regardless of the reader's browser/OS setting -- so there is one
+# palette below, not a light/dark pair.
 _DARK_THEME = {
     "page_bg": "#0f1117", "page_text": "#fff",
     "muted_text": "#94a3b8", "faint_text": "#64748b", "soft_text": "#e2e8f0",
@@ -59,120 +53,21 @@ _DARK_THEME = {
     # Plain colored TEXT (no background of its own) for the Within/Slow
     # states -- the stat-line spans and the deviation-table trend arrows.
     # Unlike the fill tokens above, plain text sits directly on the page/card
-    # background, so it DOES need a per-theme value. WITHIN_COLOR/SLOW_COLOR
-    # themselves are light, saturated hues chosen to read on a near-black
-    # canvas (that's also why their FILL usages -- pie slices, badges -- use
-    # dark near-black text on top); as plain text they stay exactly those
-    # colors here since dark-canvas contrast was already verified.
+    # background. WITHIN_COLOR/SLOW_COLOR were chosen to read as text on
+    # this near-black canvas, so they're reused as-is (contrast verified).
     "within_text": WITHIN_COLOR, "slow_text": SLOW_COLOR,
 }
-_LIGHT_THEME = {
-    "page_bg": "#F7F8FA", "page_text": "#1F1F1F",  # #1F1F1F is the guide's own base "Black / Body text"
-    "muted_text": "#5B6472", "faint_text": "#8A94A6", "soft_text": "#1F1F1F",
-    "card_bg": "#FFFFFF", "card_bg_alt": "#EEF2F6",
-    "border": "#E2E8F0", "border_strong": "#CBD5E1",
-    "chip_bg": "#EFF6FF", "chip_border": _PRIMARY,
-    "link": _PRIMARY, "link_hover": "#0D4A8F",
-    "badge_bg": "#E6F4EA", "badge_text": "#1A7053",  # the guide's own "Fast Cycle/Gain" green -- a good fit for a plain positive/info badge here, just not for CTE's own Fast state (see FAST_COLOR)
-    "note_text": "#94A3B8",
-    "chart_font": "#1F1F1F", "chart_tick": "#5B6472", "chart_grid": "#D8DEE6",
-    "chart_outline": "#FFFFFF",
-    # WITHIN_COLOR (#5CA5FF) and SLOW_COLOR (#F8A425) both fail WCAG AA as
-    # plain text on a light page (contrast ratios ~2.5:1 and ~2.0:1 against
-    # white -- well under the 4.5:1 minimum). These are darkened, same-hue
-    # stand-ins used ONLY for that plain-text case in light mode; every fill
-    # usage (bars, pies, badges) keeps the exact brand hex in both themes.
-    # within_text reuses the system's Primary blue (5.9:1 on white) -- a
-    # sanctioned token rather than an invented blue. slow_text is a manually
-    # darkened SLOW_COLOR (5.97:1 on white); the guide gives no darker step
-    # for this hue, so this is an approximation, not a token.
-    "within_text": _PRIMARY, "slow_text": "#885A14",
-}
-
-
-_THEME_RADIO_KEY = "v3_theme_radio"
 
 
 def get_theme():
-    """The active light/dark palette dict.
+    """The app's one dark palette dict.
 
-    Order of precedence:
-      1. An explicit choice from this app's own sidebar toggle (render_
-         theme_toggle) -- read directly from that widget's OWN session_state
-         entry, "Auto" meaning no override. Deliberately not a separate
-         tracking key: recomputing one from the other (an earlier version
-         of this function did) creates a feedback loop, since the widget's
-         `index` would then be derived, every rerun, from the very value
-         the user just changed it away from -- see render_theme_toggle.
-      2. Otherwise, Streamlit's own theme setting (its Settings menu, which
-         itself can follow the OS): st.context.theme.type reflects that
-         regardless of this app's own CSS overrides below, so detection
-         isn't circular.
-
-    st.context.theme.type can be None briefly -- on a session's first
-    script run, or mid-toggle right after the user changes it (see
-    Streamlit issue #11920) -- in which case this defaults to dark, this
-    app's original and most-tested design.
-
-    Note this only ever changes colors THIS APP injects itself (page
-    background, cards, text, every chart), plus the specific native
-    elements inject_theme's CSS explicitly repaints (the sidebar itself,
-    and BaseWeb input/select/button chrome -- see those rules' comments).
-    What it can NOT reach via CSS: the canvas-rendered dataframe grid
-    above all, since CSS cannot restyle pixels a <canvas> already painted,
-    plus sliders and scrollbars. Streamlit has no documented API to force
-    this remaining native chrome to a specific theme at runtime; it keeps
-    following the browser's real theme regardless of what's picked here.
-
-    (Deliberately not "fixed" by writing Streamlit's own theme-choice
-    localStorage key and reloading -- tried twice. The write+reload
-    mechanics themselves can be made loop-safe (a read-before-write guard:
-    skip the reload when the stored value already matches). But this app
-    gates on a password held in plain st.session_state, which a hard
-    browser reload does not preserve -- confirmed directly, reproducibly,
-    every time: picking Light or Dark logged the session straight back out
-    to the password screen. That's not a rare edge case to guard against,
-    it's the guaranteed outcome of every reload, so this stays CSS-only.)
+    Kept as a function -- rather than every caller reaching for _DARK_THEME
+    directly -- so a caller reads as "the active theme", consistent with
+    every other theme-aware helper in this module (hr(), trend_change_css(),
+    inject_theme(), ...).
     """
-    override = st.session_state.get(_THEME_RADIO_KEY, "Auto")
-    if override in ("Light", "Dark"):
-        return _LIGHT_THEME if override == "Light" else _DARK_THEME
-    try:
-        mode = st.context.theme.type
-    except Exception:
-        mode = None
-    return _LIGHT_THEME if mode == "light" else _DARK_THEME
-
-
-def render_theme_toggle():
-    """Sidebar Light/Dark/Auto control, overriding get_theme()'s default
-    of following Streamlit's own (hard-to-reach, since this app hides
-    Streamlit's own menu -- see inject_theme's #MainMenu rule) theme
-    setting. "Auto" clears the override and falls back to that detection.
-
-    No explicit state handling needed beyond the widget itself: a keyed
-    widget's own session_state entry IS the override get_theme() reads, so
-    Streamlit's normal reactivity (a widget change reruns the script, and
-    session_state[key] is populated from that pending change before the
-    script starts) is already sufficient -- confirmed live, the very same
-    run that registers the click already renders with the new theme's CSS.
-
-    No `index=` argument, deliberately: Streamlit uses it only to seed a
-    keyed widget's FIRST-EVER render (defaulting to "Auto" here, option 0,
-    exactly the desired default), then manages session_state[key] itself
-    from then on via the widget's own reactivity. Recomputing `index` from
-    that same session_state on every rerun -- an earlier version of this
-    function did, via a second, separate tracking key -- fights that:
-    Streamlit resolved the widget back to whatever `index` said rather
-    than the reader's just-made pending selection, so the control could
-    never actually move away from its initial value.
-    """
-    st.sidebar.markdown("### Appearance")
-    st.sidebar.radio(
-        "Theme", ["Auto", "Dark", "Light"], horizontal=True,
-        key=_THEME_RADIO_KEY, label_visibility="collapsed",
-        help="Auto follows your browser/OS setting.",
-    )
+    return _DARK_THEME
 
 
 def esc(value):
@@ -222,10 +117,9 @@ def scroll_to_top(nonce=0):
 
 
 def inject_theme():
-    """Page-shell CSS, light or dark depending on Streamlit's own theme
-    setting. Carried over from the Executive app's original dark design,
-    plus v3's breadcrumb and summary-tile rules; the light variant is this
-    app's own derivation (see get_theme())."""
+    """Page-shell CSS for the app's one dark theme. Carried over from the
+    Executive app's original dark design, plus v3's breadcrumb and
+    summary-tile rules."""
     st.markdown(_theme_css(get_theme()), unsafe_allow_html=True)
 
 
@@ -250,12 +144,11 @@ _THEME_CSS_TEMPLATE = string.Template("""
 #MainMenu {visibility:hidden;} footer {visibility:hidden;}
 header {background-color:transparent !important;}
 .block-container {padding-top:2rem !important; padding-bottom:2rem !important; max-width:1600px;}
-/* The sidebar is Streamlit's own native chrome, styled by ITS OWN detected
-   theme -- untouched, it keeps following the real browser/OS preference
-   even after the sidebar toggle above (render_theme_toggle) overrides
-   get_theme() for everything else, producing a literal split-screen (a
-   light main area next to a still-dark native sidebar) whenever the
-   reader's manual choice disagrees with their actual browser theme. */
+/* The sidebar is Streamlit's own native chrome; .streamlit/config.toml's
+   [theme] base="dark" already makes it dark by default, but this stays as
+   a belt-and-suspenders override so it always matches this app's own
+   ${page_bg}/${page_text} exactly, rather than trusting the config'd theme
+   to agree on the precise hex values. */
 [data-testid="stSidebar"] { background-color:${page_bg} !important; }
 [data-testid="stSidebar"] * { color:${page_text}; }
 /* Every native BaseWeb/Streamlit control that paints its OWN chrome rather
@@ -265,11 +158,10 @@ header {background-color:transparent !important;}
    sidebar: the very same gap the sidebar rule above closes exists for
    every one of these in the MAIN content area too, since .stApp's `color`
    still cascades text onto them even though its `background-color`
-   doesn't. Left unfixed, that's dark-on-dark (or light-on-light) text
-   sitting directly in a "29 tools" drill button or a search box -- not
-   just mistinted, actually illegible. data-baseweb/data-testid are
-   Streamlit's own stable hooks for this, unlike its generated one-off
-   class names. */
+   doesn't. Left unfixed, that's dark-on-dark text sitting directly in a
+   "29 tools" drill button or a search box -- not just mistinted, actually
+   illegible. data-baseweb/data-testid are Streamlit's own stable hooks for
+   this, unlike its generated one-off class names. */
 [data-baseweb="input"],
 [data-baseweb="base-input"],
 [data-baseweb="select"],
@@ -619,8 +511,8 @@ def bucket_label(bucket_ts, freq):
 def hr(margin="1.75rem 0"):
     """A theme-aware divider -- every `<hr>` in the app goes through this
     rather than a literal border-color, so it never falls out of sync with
-    the page's active light/dark theme the way ~20 hand-written copies of
-    the same hex value inevitably would."""
+    the page's active theme the way ~20 hand-written copies of the same hex
+    value inevitably would."""
     st.markdown(f"<hr style='border-color:{get_theme()['border']};margin:{margin};'>",
                 unsafe_allow_html=True)
 

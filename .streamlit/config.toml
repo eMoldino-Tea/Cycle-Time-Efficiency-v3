@@ -1,0 +1,8 @@
+# Locks Streamlit's own native rendering to dark -- the app is dark-mode
+# only (see cte_ui.py's get_theme()). This reaches native chrome this app's
+# own CSS cannot: the canvas-rendered dataframe grid (CSS can't restyle
+# pixels a <canvas> already painted), sliders, and scrollbars, all of which
+# previously kept following the reader's real browser/OS theme regardless
+# of what this app's own CSS said.
+[theme]
+base = "dark"

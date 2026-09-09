@@ -663,50 +663,16 @@ def test_a_forward_crumb_appears_after_navigating_back():
     assert at.session_state[nav._STACK_KEY] == [("global", None), ("region", "APAC")]
 
 
-def _theme_radio(at):
-    return [r for r in at.radio if r.key == ui._THEME_RADIO_KEY][0]
-
-
-def test_theme_toggle_appears_in_sidebar_defaulting_to_auto():
+def test_no_appearance_toggle_in_sidebar():
+    """The app is dark-mode only (cte_ui.get_theme() always returns
+    _DARK_THEME) -- there is no reader-facing Appearance/Theme control to
+    remove it again."""
     at = run_at(STACKS["global"])
-    radio = _theme_radio(at)
-    assert list(radio.options) == ["Auto", "Dark", "Light"]
-    assert radio.value == "Auto"
+    assert "Appearance" not in all_text(at)
+    assert not [r for r in at.radio if r.label == "Theme"]
 
 
-def test_picking_light_in_the_toggle_actually_changes_the_rendered_css():
-    """End-to-end: the widget a reader clicks must reach get_theme() and
-    change what inject_theme() emits, not just update some inert
-    session_state key. Takes effect on the SAME run as the click (not the
-    next one): get_theme() reads the radio widget's own session_state
-    entry directly, which Streamlit populates from the pending interaction
-    before the script starts, ahead of inject_theme()'s own call this run."""
+def test_rendered_css_is_always_the_dark_theme():
     at = run_at(STACKS["global"])
-    before = [m.value for m in at.markdown if ".stApp {" in m.value][0]
-    assert ui._LIGHT_THEME["page_bg"] not in before
-
-    _theme_radio(at).set_value("Light").run()
-    assert not at.exception
-    assert at.session_state[ui._THEME_RADIO_KEY] == "Light"
-    after = [m.value for m in at.markdown if ".stApp {" in m.value][0]
-    assert ui._LIGHT_THEME["page_bg"] in after
-    assert ui._DARK_THEME["page_bg"] not in after
-
-
-def test_picking_auto_after_light_clears_the_override():
-    """Regression guard: an earlier version of render_theme_toggle() passed
-    `index=` recomputed from session_state on every rerun, which fought
-    the reader's own pending selection -- Streamlit kept resolving the
-    widget back to its OLD value, so it could never actually move away
-    from whatever it was first rendered with. No `index=` argument now."""
-    at = run_at(STACKS["global"])
-    _theme_radio(at).set_value("Light").run()
-    assert at.session_state[ui._THEME_RADIO_KEY] == "Light"
-
-    _theme_radio(at).set_value("Auto").run()
-    assert not at.exception
-    assert at.session_state[ui._THEME_RADIO_KEY] == "Auto"
-
-    _theme_radio(at).set_value("Dark").run()
-    assert not at.exception
-    assert at.session_state[ui._THEME_RADIO_KEY] == "Dark"
+    css = [m.value for m in at.markdown if ".stApp {" in m.value][0]
+    assert ui._DARK_THEME["page_bg"] in css
