@@ -387,10 +387,12 @@ def ranking_bars(df, dims, tolerance_pct, keyns, top_n=10, show_selector=True):
     harder to read than one sortable table, and a table surfaces every
     computed column (Total Toolings, Hours/Shots Gained & Lost, Net
     figures, Efficiency %, Performance Status), not just the one metric a
-    bar's length can show. The toggle only appears when there are actually
-    more than `top_n` entities to hide -- e.g. Region (4 entities) never
-    shows it, since "top 10" already is the full list and a checkbox that
-    visibly changes nothing just reads as broken.
+    bar's length can show. Always offered, regardless of entity count: even
+    when a dimension has fewer than `top_n` entities (Region, say) and the
+    bar charts already show all of them, the table is still a strictly
+    richer view of the same entities -- every extra column above, not just
+    more rows -- so it's never a no-op the way re-showing the identical
+    bars would be.
 
     Returns (dimension, entity) for a clicked bar or table row, else None.
     """
@@ -399,22 +401,16 @@ def ranking_bars(df, dims, tolerance_pct, keyns, top_n=10, show_selector=True):
         return
     pick = (st.radio("Rank by", dims, horizontal=True, key=f"rankdim_{keyns}")
            if show_selector else dims[0])
-    # Unsliced once, for both the entity count (to decide whether the
-    # toggle is even relevant) and as the source to slice down from --
-    # ranking_by_financial's rank numbering already matches a plain head(),
-    # so no second query is needed for the top-`top_n` case.
     gain_full = core.ranking_by_financial(df, pick, 'Financial Gained', None, tolerance_pct)
     loss_full = core.ranking_by_financial(df, pick, 'Financial Lost', None, tolerance_pct)
     if gain_full.empty:
         st.info("No data available for this ranking.")
         return None
     total_entities = len(gain_full)
-    needs_toggle = total_entities > top_n
-    show_full = False
-    if needs_toggle:
-        show_full = st.checkbox(
-            "Show full list", key=f"rankfull_{keyns}",
-            help=f"Show all {total_entities} {pick.lower()}s instead of just the top {top_n}")
+    show_full = st.checkbox(
+        "Show full list", key=f"rankfull_{keyns}",
+        help=f"Show all {total_entities} {pick.lower()}s as a detailed table, "
+             f"with every computed column, instead of the top {top_n} as charts")
 
     if show_full:
         return _ranking_detail_table(df, pick, tolerance_pct, keyns)
@@ -423,7 +419,7 @@ def ranking_bars(df, dims, tolerance_pct, keyns, top_n=10, show_selector=True):
     loss = loss_full.head(top_n)
     clicked = None
     t = ui.get_theme()
-    qualifier = "All" if not needs_toggle else f"Top {top_n}"
+    qualifier = "All" if total_entities <= top_n else f"Top {top_n}"
 
     left, right = st.columns(2)
     for col, data, metric, color, title in [

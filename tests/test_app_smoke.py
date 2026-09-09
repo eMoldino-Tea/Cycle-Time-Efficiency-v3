@@ -485,6 +485,24 @@ def test_show_full_list_works_on_every_tab_with_a_ranking_section(level, monkeyp
     assert detail_tables, f"{level}: Show full list should render a detail table"
 
 
+def test_show_full_list_checkbox_appears_even_for_a_small_dimension():
+    """Regression guard: the checkbox used to hide itself when a dimension
+    had <= top_n entities, reasoning that the bar charts already showed all
+    of them so toggling did nothing. That stopped being true once "Show
+    full list" started swapping to a detail table with extra columns
+    (Total Tools, Hours/Shots Gained & Lost, Net figures, Performance
+    Status) -- checking it is never a no-op now, even for Region's 4
+    entities, so the checkbox must always render, real top_n=10 and all
+    (no monkeypatching here, unlike the parametrized test above)."""
+    at = run_at(STACKS["region_all"])
+    cb = [c for c in at.checkbox if c.label == "Show full list"]
+    assert cb, "Show full list checkbox missing for a small dimension (Region)"
+    at = cb[0].set_value(True).run()
+    assert not at.exception
+    detail_tables = [d for d in at.dataframe if list(d.value.columns[:1]) == ["Rank"]]
+    assert detail_tables, "checking Show full list should render the detail table"
+
+
 # ---- Detailed Analysis: the selected-item summary --------------------------
 
 # Every tier where something is actually selected. Root tabs are excluded on
