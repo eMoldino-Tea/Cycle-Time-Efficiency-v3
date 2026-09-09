@@ -448,6 +448,43 @@ def test_show_full_list_renders_a_detail_table_not_bar_charts(monkeypatch):
     assert len(detail) == 12, "detail table should list every APAC supplier, not just the top 3"
 
 
+@pytest.mark.parametrize("level", ["global", "region_all", "country_all",
+                                   "supplier_all", "plant_all", "type_all",
+                                   "project_all", "part_all",
+                                   "region", "country", "supplier", "plant",
+                                   "type", "project"])
+def test_show_full_list_works_on_every_tab_with_a_ranking_section(level, monkeypatch):
+    """"Show full list" lives inside ranking_bars, one function every tab's
+    ranking section calls through -- proven here across every level that
+    has one: every root tab, every scope-overview level, and every single-
+    entity drill-down except Part (which has nothing left to rank by, per
+    _RANKING_FLOOR). Master Filter is left empty, so each level ranks by
+    its own forced primary entity (Default State) -- top_n is forced down
+    to 1 so even Region's entities exceed it, without a bigger fixture."""
+    import cte_charts as charts
+    orig_ranking_bars = charts.ranking_bars
+
+    def _low_top_n(df, dims, tolerance_pct, keyns, top_n=10, show_selector=True):
+        return orig_ranking_bars(df, dims, tolerance_pct, keyns, top_n=1,
+                                 show_selector=show_selector)
+
+    import cte_views as views
+    monkeypatch.setattr(views.ch, "ranking_bars", _low_top_n)
+
+    at = run_at(STACKS[level])
+    assert not at.exception, f"{level} raised: {at.exception}"
+
+    cb = [c for c in at.checkbox if c.label == "Show full list"]
+    assert cb, f"{level}: expected a Show full list checkbox with top_n=1"
+    at = cb[0].set_value(True).run()
+    assert not at.exception, f"{level} raised after checking Show full list: {at.exception}"
+
+    rank_charts = [c for c in at.get("plotly_chart") if c.key and c.key.startswith("rank_")]
+    assert not rank_charts, f"{level}: Show full list should render a table, not bar charts"
+    detail_tables = [d for d in at.dataframe if list(d.value.columns[:1]) == ["Rank"]]
+    assert detail_tables, f"{level}: Show full list should render a detail table"
+
+
 # ---- Detailed Analysis: the selected-item summary --------------------------
 
 # Every tier where something is actually selected. Root tabs are excluded on
