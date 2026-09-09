@@ -344,8 +344,11 @@ def ranking_bars(df, dims, tolerance_pct, keyns, top_n=10):
     top-to-bottom as best-to-worst / worst-to-best on screen.
 
     A "Show full list" toggle switches both sides from the top-`top_n` cut
-    to every entity (ranking_by_financial(top_n=None)), for when a reader
-    needs the whole supplier/plant/etc. list rather than just the extremes.
+    to every entity, for when a reader needs the whole supplier/plant/etc.
+    list rather than just the extremes. The toggle only appears when there
+    are actually more than `top_n` entities to hide -- e.g. Region (4
+    entities) never shows it, since "top 10" already is the full list and a
+    checkbox that visibly changes nothing just reads as broken.
 
     Returns (dimension, entity) for a clicked bar, else None.
     """
@@ -353,14 +356,23 @@ def ranking_bars(df, dims, tolerance_pct, keyns, top_n=10):
     if not dims:
         return
     pick = st.radio("Rank by", dims, horizontal=True, key=f"rankdim_{keyns}")
-    show_full = st.checkbox("Show full list", key=f"rankfull_{keyns}",
-                            help=f"Show every {pick.lower()} instead of just the top {top_n}")
-    n = None if show_full else top_n
-    gain = core.ranking_by_financial(df, pick, 'Financial Gained', n, tolerance_pct)
-    loss = core.ranking_by_financial(df, pick, 'Financial Lost', n, tolerance_pct)
-    if gain.empty:
+    # Unsliced once, for both the entity count (to decide whether the
+    # toggle is even relevant) and as the source to slice down from --
+    # ranking_by_financial's rank numbering already matches a plain head(),
+    # so no second query is needed for the top-`top_n` case.
+    gain_full = core.ranking_by_financial(df, pick, 'Financial Gained', None, tolerance_pct)
+    loss_full = core.ranking_by_financial(df, pick, 'Financial Lost', None, tolerance_pct)
+    if gain_full.empty:
         st.info("No data available for this ranking.")
         return None
+    total_entities = len(gain_full)
+    show_full = total_entities <= top_n
+    if not show_full:
+        show_full = st.checkbox(
+            "Show full list", key=f"rankfull_{keyns}",
+            help=f"Show all {total_entities} {pick.lower()}s instead of just the top {top_n}")
+    gain = gain_full if show_full else gain_full.head(top_n)
+    loss = loss_full if show_full else loss_full.head(top_n)
     clicked = None
     t = ui.get_theme()
     qualifier = "All" if show_full else f"Top {top_n}"
