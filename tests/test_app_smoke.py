@@ -334,17 +334,76 @@ def test_ranking_selector_drops_dimensions_the_scope_already_pins():
         "Supplier", "Plant", "Tooling Type", "Project", "Part"]
 
 
+def _set_master_filter(at, column, values):
+    """Select `values` in the sidebar Master Filter multiselect for
+    `column`, returning the AppTest after the resulting rerun."""
+    ms = [m for m in at.multiselect if m.label == column]
+    assert ms, f"Master Filter has no {column!r} multiselect"
+    return ms[0].set_value(values).run()
+
+
 @pytest.mark.parametrize("level", ["global", "region_all", "country_all",
                                    "supplier_all", "plant_all", "type_all",
                                    "project_all", "part_all"])
-def test_every_tab_offers_the_full_ranking_selector(level):
-    """"under each tab" -- the root pages all get the same Rank-by options,
-    not just their own dimension."""
+def test_rank_by_selector_hidden_with_empty_master_filter(level):
+    """Product decision (Default State): with no Master Filter selection, a
+    page has no Rank By CHOICE at all -- it ranks by its own tab's primary
+    entity only, with no radio rendered."""
     at = run_at(STACKS[level])
     rank = [r for r in at.radio if r.label == "Rank by"]
-    assert rank, f"{level} has no Rank-by selector"
+    assert rank == [], f"{level} shows a Rank-by selector with no Master Filter selection"
     import cte_views as views
-    assert list(rank[0].options) == views._ranking_dims(level)
+    forced = views._ranking_dims(level)[0]
+    assert f"{forced}s — Saving Opportunity" in all_text(at), (
+        f"{level} should still rank by its own primary entity ({forced}) with no selector")
+
+
+def test_rank_by_selector_appears_and_is_hierarchy_scoped_by_region():
+    """Active State, spec Example A: selecting a Region narrows Rank By to
+    every hierarchy tier strictly below Region. Unlike the platform-data
+    repo, this demo dataset genuinely carries a Toolmaker column, so it
+    (correctly) shows up here rather than self-hiding."""
+    at = run_at(STACKS["global"])
+    at = _set_master_filter(at, "Region", ["APAC"])
+    rank = [r for r in at.radio if r.label == "Rank by"]
+    assert rank, "no Rank-by selector after a Region selection"
+    assert list(rank[0].options) == [
+        "Country", "Supplier", "Toolmaker", "Plant", "Tooling Type", "Project", "Part"]
+
+
+def test_rank_by_selector_is_hierarchy_scoped_by_country():
+    """Active State, spec Example B."""
+    at = run_at(STACKS["global"])
+    at = _set_master_filter(at, "Country", ["China"])
+    rank = [r for r in at.radio if r.label == "Rank by"]
+    assert rank, "no Rank-by selector after a Country selection"
+    assert list(rank[0].options) == [
+        "Supplier", "Toolmaker", "Plant", "Tooling Type", "Project", "Part"]
+
+
+def test_rank_by_treats_product_and_project_as_the_same_tier():
+    """Product and Project sit at the same hierarchy tier (Tooling Type >
+    [Product/Project] > Part) even though, in this demo dataset, they hold
+    independent values (unlike the platform-data repo, where both come from
+    the same platform field) -- a selection in either Master Filter
+    multiselect must reach that tier, leaving only Part below it."""
+    at = run_at(STACKS["global"])
+    at = _set_master_filter(at, "Product", ["Product V12"])
+    rank = [r for r in at.radio if r.label == "Rank by"]
+    assert rank, "no Rank-by selector after a Product selection"
+    assert list(rank[0].options) == ["Part"]
+
+
+def test_rank_by_selector_disappears_when_nothing_is_left_below_selection():
+    """Selecting all the way down to Part leaves nothing to rank by (Tooling
+    is deliberately never offered -- see RANKING_DIMS's own comment), so the
+    whole ranking section, not just the selector, must disappear."""
+    at = run_at(STACKS["global"])
+    parts = [m for m in at.multiselect if m.label == "Part"]
+    assert parts, "Master Filter has no Part multiselect"
+    any_part = parts[0].options[0]
+    at = _set_master_filter(at, "Part", [any_part])
+    assert "Saving Opportunity & Loss Ranking" not in all_text(at)
 
 
 # ---- Detailed Analysis: the selected-item summary --------------------------

@@ -328,13 +328,19 @@ def single_pie(df, tolerance_pct, keyns, title="Cycle Time Efficiency Split"):
 # --------------------------------------------------------------------------
 # Rankings
 # --------------------------------------------------------------------------
-def ranking_bars(df, dims, tolerance_pct, keyns, top_n=10):
+def ranking_bars(df, dims, tolerance_pct, keyns, top_n=10, show_selector=True):
     """Saving-opportunity and loss rankings across one or more dimensions.
 
     `dims` is a list of record columns, e.g. ['Region', 'Country', 'Supplier',
     'Tooling', 'Part', 'Tooling Type'] for the Global Overview. Rendered as a
     dimension picker plus paired gain/loss bar charts, so all six rankings are
     available without six stacked charts.
+
+    `show_selector` (set by the caller from the sidebar Master Filter's own
+    state -- see cte_views.ranking_dims_for) toggles whether the "Rank by"
+    radio is shown at all. When False, `dims` is expected to carry exactly
+    one entry -- the page's own primary entity -- and that entry is used
+    directly with no reader choice, no radio rendered.
 
     Each side is independently sorted by its own dollar figure -- best (the
     biggest saving opportunity) first for Gain, worst (the biggest loss)
@@ -355,7 +361,8 @@ def ranking_bars(df, dims, tolerance_pct, keyns, top_n=10):
     dims = [d for d in dims if d in df.columns]
     if not dims:
         return
-    pick = st.radio("Rank by", dims, horizontal=True, key=f"rankdim_{keyns}")
+    pick = (st.radio("Rank by", dims, horizontal=True, key=f"rankdim_{keyns}")
+           if show_selector else dims[0])
     # Unsliced once, for both the entity count (to decide whether the
     # toggle is even relevant) and as the source to slice down from --
     # ranking_by_financial's rank numbering already matches a plain head(),

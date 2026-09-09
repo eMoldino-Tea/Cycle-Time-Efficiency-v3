@@ -8,7 +8,7 @@ Levels 1-3 (Global / Region / Country) are the same page with a different
 child dimension, so they share render_scope_overview.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pandas as pd
 import streamlit as st
@@ -26,6 +26,12 @@ class Ctx:
     scope: the current-period, master-filtered, level-scoped frame.
     trend: the same scope over the FULL history (ignores the sidebar Time
            Range) — both trend graphs use this.
+    master_selections: {column: [selected values]} straight from the
+           sidebar Master Filter, in hierarchy order (Cycle-Time-Efficiency-
+           v3.py builds it by iterating MASTER_FILTER_COLS). Used only to
+           decide the Rank By selector's options (see ranking_dims_for) --
+           scope/trend are already filtered by every active selection, not
+           just this.
     """
     scope: pd.DataFrame
     trend: pd.DataFrame
@@ -34,6 +40,7 @@ class Ctx:
     tolerance_pct: float
     period_label: str
     keyns: str
+    master_selections: dict = field(default_factory=dict)
 
 
 def _drill(level, value):
@@ -114,11 +121,12 @@ def render_scope_overview(ctx):
     pie_click = ch.small_multiple_pies(ctx.scope, child_dim, ctx.tolerance_pct, ctx.keyns)
 
     bar_click = None
-    dims = _ranking_dims(ctx.level)
+    dims, show_selector = ranking_dims_for(ctx.level, ctx.master_selections, ctx.scope)
     if dims:
         st.markdown("<br>", unsafe_allow_html=True)
         ui.section("Saving Opportunity & Loss Ranking", size="1.1rem")
-        bar_click = ch.ranking_bars(ctx.scope, dims, ctx.tolerance_pct, ctx.keyns)
+        bar_click = ch.ranking_bars(ctx.scope, dims, ctx.tolerance_pct, ctx.keyns,
+                                    show_selector=show_selector)
     _handle_clicks(card, pie_click, child_dim, bar_click)
 
     # --- B. Trend ---
@@ -222,6 +230,77 @@ def _ranking_dims(level):
     return RANKING_DIMS[RANKING_DIMS.index(floor):]
 
 
+# ---------------------------------------------------------------------
+# Rank By, gated by the sidebar Master Filter (product decision, not a
+# leftover default): with no Master Filter selection, a page ranks by its
+# own tab's primary entity and nothing else -- no selector, no choice. The
+# moment a Master Filter selection narrows the data, the selector appears,
+# offering every hierarchy tier strictly below the DEEPEST active
+# selection, regardless of which tab happens to be open: once a reader has
+# said "only APAC", ranking that slice by Country / Supplier / Plant / etc.
+# is meaningful from ANY tab, not just the ones RANKING_DIMS itself curates
+# for the no-filter case.
+#
+# This hierarchy mirrors Cycle-Time-Efficiency-v3.py's own MASTER_FILTER_COLS
+# ordering (kept independent here rather than imported, since the main
+# script is the entry point, not an importable module). Project and Product
+# are the same real-world field -- both populated from the platform's one
+# "product" column -- so a selection in either Master Filter multiselect
+# reaches the same tier. Tooling sits at the bottom for floor purposes only:
+# it is never itself offered as a Rank By option (see RANKING_DIMS's own
+# comment -- ranking by individual tool was dropped from this selector).
+_HIERARCHY = [
+    'OEM Business Division', 'Region', 'Country', 'Supplier', 'Toolmaker',
+    'Plant', 'Tooling Type', 'Project', 'Part', 'Tooling',
+]
+_PROJECT_TIER_ALIASES = ('Project', 'Product')
+_RANK_BY_CANDIDATES = [d for d in _HIERARCHY if d != 'Tooling']
+
+
+def _master_filter_floor(master_selections):
+    """Index into _HIERARCHY of the deepest (most specific) Master Filter
+    dimension carrying an active selection, or None if every Master Filter
+    multiselect is empty."""
+    lowest = None
+    for col, values in master_selections.items():
+        if not values:
+            continue
+        tier = 'Project' if col in _PROJECT_TIER_ALIASES else col
+        if tier not in _HIERARCHY:
+            continue
+        idx = _HIERARCHY.index(tier)
+        if lowest is None or idx > lowest:
+            lowest = idx
+    return lowest
+
+
+def ranking_dims_for(level, master_selections, df):
+    """The Rank By dims to offer at `level`, and whether to show the
+    selector at all.
+
+    Master Filter empty -> ([<tab's own primary entity>], False): hide the
+    selector, no reader choice.
+    Master Filter active -> (<tiers strictly below the deepest selection>,
+    True): show the selector. This deliberately ignores the tab's own
+    RANKING_DIMS floor -- see the module comment above -- so it can offer
+    tiers (Toolmaker, OEM Business Division) that floor never curated for.
+
+    Every returned dim is checked against `df.columns`, same as Master
+    Filter's own multiselects: a tier with no data column today (Toolmaker,
+    OEM Business Division) simply never appears, rather than rendering a
+    ranking section with nothing under its header.
+    """
+    nav_dims = [d for d in _ranking_dims(level) if d in df.columns]
+    if not nav_dims:
+        return [], False
+    floor_idx = _master_filter_floor(master_selections)
+    if floor_idx is None:
+        return [nav_dims[0]], False
+    dims = [d for d in _RANK_BY_CANDIDATES
+           if _HIERARCHY.index(d) > floor_idx and d in df.columns]
+    return dims, True
+
+
 def _tool_table(df, period_label, tolerance_pct, extra_cols=()):
     """Tool rows in v3's canonical tool-table shape (Part C decision 9).
 
@@ -273,10 +352,11 @@ def render_entity_tools(ctx):
     # so a supplier ranks its plants / tooling types / projects / parts
     # rather than the tools directly beneath it.
     bar_click = None
-    dims = _ranking_dims(ctx.level)
+    dims, show_selector = ranking_dims_for(ctx.level, ctx.master_selections, ctx.scope)
     if dims:
         ui.section("Saving Opportunity & Loss Ranking", size="1.1rem")
-        bar_click = ch.ranking_bars(ctx.scope, dims, ctx.tolerance_pct, ctx.keyns)
+        bar_click = ch.ranking_bars(ctx.scope, dims, ctx.tolerance_pct, ctx.keyns,
+                                    show_selector=show_selector)
     _handle_clicks(card, None, None, bar_click)
 
     ui.hr()
@@ -501,11 +581,12 @@ def render_dimension_all(ctx):
     # and below -- no entity is selected on a root tab, so its own tier still
     # ranks meaningfully (the Country tab really does rank countries).
     bar_click = None
-    dims = _ranking_dims(ctx.level)
+    dims, show_selector = ranking_dims_for(ctx.level, ctx.master_selections, ctx.scope)
     if dims:
         st.markdown("<br>", unsafe_allow_html=True)
         ui.section("Saving Opportunity & Loss Ranking", size="1.1rem")
-        bar_click = ch.ranking_bars(ctx.scope, dims, ctx.tolerance_pct, ctx.keyns)
+        bar_click = ch.ranking_bars(ctx.scope, dims, ctx.tolerance_pct, ctx.keyns,
+                                    show_selector=show_selector)
     _handle_clicks(card, pie_click, entity_col, bar_click)
 
     ui.hr()

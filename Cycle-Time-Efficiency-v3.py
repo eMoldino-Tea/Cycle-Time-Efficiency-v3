@@ -283,6 +283,7 @@ ctx = views.Ctx(
     tolerance_pct=tolerance_pct,
     period_label=period_label,
     keyns=nav.keyns(),
+    master_selections=master_selections,
 )
 
 if ctx.scope.empty:
