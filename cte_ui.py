@@ -15,12 +15,14 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-# Cycle Time Efficiency color tokens, per the MMS 2.0 design system's
-# Cycle Time Efficiency application row. Fast is a warm red-toned "quality-
+# Cycle Time Efficiency color tokens. Fast is a warm red-toned "quality-
 # risk flagged" token, not green: running faster than the Approved Cycle
 # Time (ACT) can mean under-cured or otherwise out-of-spec parts, so the
-# system deliberately does not treat "fast" as simply "good".
-FAST_COLOR = "#B04A5E"            # Fast (Gain) -- quality-risk flagged
+# system deliberately does not treat "fast" as simply "good". Pinned to
+# Red-500 per explicit direction, overriding the MMS 2.0 guide's own
+# Red-700 assignment for this exact chart (guide section 2.12/§1.4 --
+# Red-700 = #B04A5E) -- a deliberate, confirmed deviation, not an error.
+FAST_COLOR = "#FB6A87"            # Fast (Gain) -- quality-risk flagged (Red-500)
 WITHIN_COLOR = "#5CA5FF"          # Within (Neutral) -- on-target / normal operation
 SLOW_COLOR = "#F8A425"            # Slow (Loss) -- caution indicator
 REFERENCE_LINE_COLOR = "#145741"  # Approved Cycle Time (ACT) baseline / target line

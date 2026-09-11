@@ -62,7 +62,7 @@ def test_semantic_fill_tokens_are_pinned():
     """FAST/WITHIN/SLOW are fills (bars, pies, badges) with their own
     self-contained contrast, independent of the page theme -- pinned here
     so a future change touching them fails loudly rather than silently."""
-    assert ui.FAST_COLOR == "#B04A5E"
+    assert ui.FAST_COLOR == "#FB6A87"  # Red-500, a deliberate override of the guide's Red-700
     assert ui.WITHIN_COLOR == "#5CA5FF"
     assert ui.SLOW_COLOR == "#F8A425"
 
