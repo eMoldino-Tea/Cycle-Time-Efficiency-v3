@@ -18,11 +18,12 @@ import streamlit.components.v1 as components
 # Cycle Time Efficiency color tokens. Fast is a warm red-toned "quality-
 # risk flagged" token, not green: running faster than the Approved Cycle
 # Time (ACT) can mean under-cured or otherwise out-of-spec parts, so the
-# system deliberately does not treat "fast" as simply "good". Pinned to
-# Red-500 per explicit direction, overriding the MMS 2.0 guide's own
-# Red-700 assignment for this exact chart (guide section 2.12/§1.4 --
-# Red-700 = #B04A5E) -- a deliberate, confirmed deviation, not an error.
-FAST_COLOR = "#FB6A87"            # Fast (Gain) -- quality-risk flagged (Red-500)
+# system deliberately does not treat "fast" as simply "good". Red-500 --
+# the guide's own §1.4 note: "revised down from Red-700" for this exact
+# chart, so this is now IN line with the guide, not an override of it.
+# Hex tracks the guide's own Red scale, which was itself revised (the old
+# Red-500 was #FB6A87; #EC413C is the current value -- see §1.2/§4.3).
+FAST_COLOR = "#EC413C"            # Fast (Gain) -- quality-risk flagged (Red-500)
 WITHIN_COLOR = "#5CA5FF"          # Within (Neutral) -- on-target / normal operation
 SLOW_COLOR = "#F8A425"            # Slow (Loss) -- caution indicator
 REFERENCE_LINE_COLOR = "#145741"  # Approved Cycle Time (ACT) baseline / target line
@@ -447,12 +448,12 @@ def neg_help(df):
 def _status_css(v):
     # Same fill colors as the charts (FAST_COLOR/WITHIN_COLOR/SLOW_COLOR), so
     # a table badge and a pie slice for the same state always agree. Text
-    # color is picked per background for contrast: WITHIN_COLOR and
-    # SLOW_COLOR are light enough that white text fails WCAG AA (2.5:1 and
-    # 2.0:1), so both use the same dark near-black already proven legible on
-    # these fills by the pie/donut slice labels; FAST_COLOR is dark enough
-    # that white text is the better contrast (5.3:1 vs 3.6:1 for dark text).
-    return {"Fast": f"background-color:{FAST_COLOR};color:#fff;",
+    # color is picked per background for contrast: all three fills are light/
+    # saturated enough that white text fails WCAG AA (FAST_COLOR's Red-500:
+    # 3.9:1; WITHIN_COLOR: 2.5:1; SLOW_COLOR: 2.0:1), so all three use the
+    # same dark near-black already proven legible on these fills by the
+    # pie/donut slice labels (FAST_COLOR w/ dark text: 4.8:1, passes AA).
+    return {"Fast": f"background-color:{FAST_COLOR};color:#0f1117;",
             "Slow": f"background-color:{SLOW_COLOR};color:#0f1117;",
             "Within": f"background-color:{WITHIN_COLOR};color:#0f1117;"}.get(v, "")
 
